@@ -109,7 +109,9 @@ Rules:
   - Cover at least one positive, one negative and one boundary case.`;
 
 /** Builds the user prompt, grounded in a spec operation when one is supplied. */
-export function buildPrompt({ url, method, description, count = 4, operation = null }) {
+export function buildPrompt({
+  url, method, description, count = 4, operation = null, categories = null,
+}) {
   const lines = [
     `Base URL: ${url}`,
     `Primary method: ${method}`,
@@ -117,6 +119,17 @@ export function buildPrompt({ url, method, description, count = 4, operation = n
     '',
     `Generate exactly ${count} test cases.`,
   ];
+
+  if (categories?.length) {
+    // Per-endpoint category selection (docs/10_AUTONOMOUS_PLATFORM.md §D): the
+    // categories that make sense for THIS endpoint, not a fixed list for every
+    // endpoint. An endpoint with no body has no malformed-body case to write.
+    lines.push(
+      '',
+      'Prioritise these test categories, chosen for this endpoint:',
+      ...categories.map((c) => `  - ${c.label}: ${c.hint}`),
+    );
+  }
 
   if (operation) {
     // Spec-grounded generation (docs/01_PRD.md F4). Assertions should reference
@@ -199,11 +212,11 @@ export function joinUrl(base, suffix) {
  * @returns {{ cases, discarded, discardReasons, tokens, provider, model, costUsd }}
  */
 export async function generateCases({
-  url, method = 'GET', description, count = 4, operation = null, llm = generateJSON,
+  url, method = 'GET', description, count = 4, operation = null, categories = null, llm = generateJSON,
 }) {
   const result = await llm({
     system: SYSTEM_PROMPT,
-    prompt: buildPrompt({ url, method, description, count, operation }),
+    prompt: buildPrompt({ url, method, description, count, operation, categories }),
     schema: generationSchema,
     maxTokens: 2400,
   });
@@ -279,10 +292,10 @@ export function summarise(results, discarded = 0) {
  * agent orchestrates; the tools act.
  */
 export async function runTestingAgent({
-  url, method = 'GET', description, count = 4, operation = null,
+  url, method = 'GET', description, count = 4, operation = null, categories = null,
   runTool, context = {}, llm = generateJSON,
 }) {
-  const generated = await generateCases({ url, method, description, count, operation, llm });
+  const generated = await generateCases({ url, method, description, count, operation, categories, llm });
 
   if (generated.cases.length === 0) {
     // Every case was discarded. Fail visibly rather than returning an empty
@@ -310,6 +323,100 @@ export async function runTestingAgent({
       generationMs: generated.generationMs,
       grounded: Boolean(operation),
     },
+  };
+}
+
+// ── Grounded testing from a discovered endpoint (Phase 2) ────────────────────
+
+/**
+ * The test categories the agent can ask for, each with a one-line prompt hint.
+ * docs/10_AUTONOMOUS_PLATFORM.md §3. selectCategories picks the subset that
+ * makes sense for a given endpoint.
+ */
+export const TEST_CATEGORY = {
+  VALID: { key: 'valid', label: 'Valid request', hint: 'a well-formed request that should succeed' },
+  MALFORMED_PARAM: { key: 'malformed_param', label: 'Malformed parameter', hint: 'a path or query parameter of the wrong shape' },
+  BOUNDARY: { key: 'boundary', label: 'Boundary value', hint: 'edge values such as 0, negative, very large, or empty' },
+  WRONG_TYPE: { key: 'wrong_type', label: 'Wrong data type', hint: 'a string where a number is expected, and similar' },
+  MISSING_BODY: { key: 'missing_body', label: 'Missing body', hint: 'no body on a write endpoint, expecting a client error' },
+  MALFORMED_BODY: { key: 'malformed_body', label: 'Malformed body', hint: 'invalid JSON or the wrong fields on a write endpoint' },
+  NOT_FOUND: { key: 'not_found', label: 'Unknown resource', hint: 'an id that does not exist, expecting 404' },
+  UNAUTH: { key: 'unauthenticated', label: 'Unauthenticated access', hint: 'no credentials against a protected route, expecting 401 or 403' },
+  SERVER_ERROR: { key: 'server_error', label: 'No unexpected 5xx', hint: 'a well-formed request must never answer 5xx' },
+};
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH']);
+/** Path segments that signal a route needs authentication (not login/register). */
+const PROTECTED_HINT = /\b(admin|account|profile|dashboard|settings|private|internal)\b/i;
+
+/**
+ * Chooses the categories worth testing for one endpoint. Deterministic: the
+ * endpoint's method, its params and its path decide, so a GET with no params
+ * gets a short list and a POST that looks protected gets body and auth cases.
+ * A fixed list for every endpoint wastes generation on cases that cannot exist.
+ */
+export function selectCategories(endpoint, { intent = null } = {}) {
+  const T = TEST_CATEGORY;
+  const chosen = [T.VALID, T.SERVER_ERROR];
+  const method = String(endpoint.method ?? 'GET').toUpperCase();
+  const params = endpoint.params ?? [];
+  const path = endpoint.path ?? '';
+
+  if (params.length) {
+    chosen.push(T.MALFORMED_PARAM, T.BOUNDARY);
+    if (params.some((p) => /id$/i.test(p)) || /:id\b|\{id\}/i.test(path)) chosen.push(T.NOT_FOUND);
+  }
+  if (WRITE_METHODS.has(method)) chosen.push(T.MISSING_BODY, T.MALFORMED_BODY, T.WRONG_TYPE);
+  if (PROTECTED_HINT.test(path) || /requires? (auth|login|a token)/i.test(String(intent ?? ''))) {
+    chosen.push(T.UNAUTH);
+  }
+
+  const seen = new Set();
+  return chosen.filter((c) => (seen.has(c.key) ? false : (seen.add(c.key), true)));
+}
+
+/**
+ * Maps a discovered endpoint (Phase 1 shape) onto the operation grounding shape
+ * the prompt already understands. Static discovery knows the method, path and
+ * path params; it does not know declared responses or security, so those are
+ * empty until spec import or intent inference fills them.
+ */
+export function endpointToOperation(endpoint, { intent = null } = {}) {
+  return {
+    method: String(endpoint.method ?? 'GET').toUpperCase(),
+    path: endpoint.path ?? '/',
+    summary: intent,
+    parameters: (endpoint.params ?? []).map((name) => ({ name, in: 'path', required: true })),
+    responses: [],
+    security: [],
+  };
+}
+
+/**
+ * Runs the Testing Agent against a DISCOVERED endpoint, with no user-typed URL
+ * or description. `baseUrl` is the running app's root; the endpoint supplies the
+ * path and params, and generation is grounded in them and in the chosen
+ * categories. This is the autonomy step: the user provides the project, not the
+ * tests. docs/10_AUTONOMOUS_PLATFORM.md §D, Phase 2.
+ */
+export async function runTestingAgentForEndpoint({
+  endpoint, baseUrl, intent = null, count = 4, runTool, context = {}, llm = generateJSON,
+}) {
+  const operation = endpointToOperation(endpoint, { intent });
+  const categories = selectCategories(endpoint, { intent });
+  const paramNote = operation.parameters.length
+    ? ` with path params ${operation.parameters.map((p) => p.name).join(', ')}`
+    : '';
+  const description = intent ?? `${operation.method} ${operation.path}${paramNote}`;
+
+  const outcome = await runTestingAgent({
+    url: baseUrl, method: operation.method, description, count,
+    operation, categories, runTool, context, llm,
+  });
+  return {
+    ...outcome,
+    endpoint: { method: operation.method, path: operation.path },
+    categories: categories.map((c) => c.key),
   };
 }
 
