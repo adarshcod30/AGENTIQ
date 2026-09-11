@@ -273,7 +273,19 @@ The app is stopped and the workspace released in a `finally`, whatever the outco
 Each phase leaves the system runnable, keeps every existing test green, and is additive. The current
 URL-driven flows keep working throughout.
 
-**Phase 1 · Discovery foundation (start here).**
+**Phase 1 · Discovery foundation. DONE.**
+Shipped: the filesystem jail (`mcp/fsJail.js`) and the `local.fs.read` risk class; the pure AST
+route analyzer (`mcp/analysis/routes.js`) with router-identifier tracking and cross-file mount
+composition; four tools (`fs_read`, `code_search`, `ast_extract`, `discover_routes`); the
+`Project` and `Discovery` models; a no-I/O `discovery.agent.js`; `discovery.service.js`; and
+`POST /api/projects`, `POST /api/projects/:id/discover`, `GET /api/projects[/:id]`. The
+architecture guard now also bars `node:fs` from agents, routes and controllers. Discovery of the
+vulnerable fixture returns its six routes with params and no LLM call; run against AGENTIQ's own
+tree it recovers all 32 endpoints with full `/api/...` paths. 41 new tests; suite at 477 green,
+coverage gate met, `npm audit` clean. The `ProjectModel` of §D is persisted as a `Discovery`
+document.
+
+Original plan for reference:
 New: `Project` model, `ProjectModel` model, the filesystem jail (`mcp/fsJail.js`), the
 `local.fs.read` risk class, and three tools: `fs_read`, `code_search`, `ast_extract`. A
 `discover_routes` tool for Express. A `discovery.agent.js` that produces a `ProjectModel` from a
