@@ -15,7 +15,15 @@ import {
   Card, CardHeader, CardBody, Button, Field, Input, Alert, Chip, SeverityChip, Skeleton, EmptyState,
 } from '@/components/ui';
 import { AssessChip } from './ProjectsPage';
-import type { Assessment, AssessState, Severity } from '@/types';
+import type { Assessment, AssessState, Severity, Recommendation } from '@/types';
+
+/** Priority styling for a recommendation: colour of the left rule and the chip. */
+const PRIORITY: Record<number, { label: string; chip: string; rule: string }> = {
+  1: { label: 'critical', chip: 'bg-danger-50 text-sev-critical', rule: 'border-l-sev-critical' },
+  2: { label: 'high', chip: 'bg-danger-50 text-sev-high', rule: 'border-l-sev-high' },
+  3: { label: 'medium', chip: 'bg-warning-50 text-sev-medium', rule: 'border-l-sev-medium' },
+  4: { label: 'low', chip: 'bg-surface-3 text-sev-low', rule: 'border-l-sev-low' },
+};
 
 /** Where each state sits on the pipeline, so the timeline can be derived. */
 const PROGRESS: Record<AssessState, number> = {
@@ -156,6 +164,29 @@ export function AssessmentDetailPage() {
         </CardBody>
       </Card>
 
+      {a.report && a.report.recommendations.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Recommendations"
+            actions={(
+              <div className="flex items-center gap-1.5">
+                {(['critical', 'high', 'medium', 'low'] as const).map((k) => {
+                  const n = a.report!.recommendationSummary.byPriority[k] ?? 0;
+                  return n > 0 ? <Chip key={k} className={PRIORITY[({ critical: 1, high: 2, medium: 3, low: 4 })[k]].chip}>{n} {k}</Chip> : null;
+                })}
+              </div>
+            )}
+          />
+          <CardBody className="space-y-3">
+            <p className="t-small text-ink-muted">
+              What to fix, why it matters, and how, in priority order. The engine derives each from the
+              stage that produced it.
+            </p>
+            {a.report.recommendations.map((r) => <RecRow key={r.id} rec={r} />)}
+          </CardBody>
+        </Card>
+      )}
+
       <Card className="overflow-hidden">
         <CardHeader title={`Endpoints (${a.endpoints.length})`} />
         {a.endpoints.length === 0 ? (
@@ -254,6 +285,36 @@ export function AssessmentDetailPage() {
             </div>
           </CardBody>
         </Card>
+      )}
+    </div>
+  );
+}
+
+/** One recommendation: what, why, how, and tips, colour-coded by priority. */
+function RecRow({ rec }: { rec: Recommendation }) {
+  const p = PRIORITY[rec.priority] ?? PRIORITY[4];
+  return (
+    <div className={`space-y-1.5 rounded-[6px] border border-line border-l-[3px] ${p.rule} bg-surface-2 p-3`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip className={p.chip}>{p.label}</Chip>
+        <Chip className="bg-surface-3 text-ink-subtle">{rec.stage}</Chip>
+        <span className="text-[13px] font-semibold text-ink">{rec.title}</span>
+      </div>
+      <p className="t-small text-ink-muted"><span className="font-semibold text-ink">Why: </span>{rec.why}</p>
+      <p className="t-small"><span className="font-semibold text-ink">Fix: </span><span className="text-ink-muted">{rec.fix}</span></p>
+      {rec.where && rec.where.length > 0 && (
+        <p className="t-small text-ink-subtle">
+          <span className="font-semibold text-ink">Affects: </span>
+          <span className="t-mono">{rec.where.join(', ')}</span>
+        </p>
+      )}
+      {rec.tips.length > 0 && (
+        <div className="pt-0.5">
+          <p className="t-label mb-0.5">Tips</p>
+          <ul className="t-small list-disc space-y-0.5 pl-5 text-ink-muted">
+            {rec.tips.map((tip, i) => <li key={i}>{tip}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   );

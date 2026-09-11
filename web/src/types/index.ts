@@ -284,6 +284,17 @@ export interface Clarification {
   answer: string | null;
 }
 
+export interface Recommendation {
+  id: string;
+  stage: 'Discovery' | 'Testing' | 'Security' | 'Deployment';
+  priority: 1 | 2 | 3 | 4;
+  title: string;
+  why: string;
+  fix: string;
+  tips: string[];
+  where?: string[];
+}
+
 export interface AssessmentReport {
   generatedAt: string;
   project: { framework: string; endpointCount: number; dependencyCount: number };
@@ -295,6 +306,8 @@ export interface AssessmentReport {
   };
   security: { total: number; bySeverity: Record<string, number>; notes: string[] };
   readiness: { ready: boolean; blockers: string[]; warnings: string[] };
+  recommendations: Recommendation[];
+  recommendationSummary: { total: number; byPriority: Record<string, number> };
 }
 
 export interface Assessment {
