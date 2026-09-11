@@ -63,6 +63,23 @@ function detectFramework(pkg) {
   return { framework, signals };
 }
 
+/**
+ * Python projects have no package.json, so their framework comes from the
+ * requirements manifest. Adds a signal and returns fastapi / flask / null.
+ */
+async function detectPythonFramework(runTool, context, signals) {
+  let framework = null;
+  for (const file of ['requirements.txt', 'pyproject.toml']) {
+    try {
+      const res = await runTool('fs_read', { path: file }, context);
+      const text = String(res.content).toLowerCase();
+      if (!framework && /\bfastapi\b/.test(text)) { framework = 'fastapi'; signals.push(`dependency: fastapi (${file})`); }
+      if (!framework && /\bflask\b/.test(text)) { framework = 'flask'; signals.push(`dependency: flask (${file})`); }
+    } catch { /* no such manifest */ }
+  }
+  return framework;
+}
+
 function extractDependencies(pkg) {
   const out = [];
   for (const [name, version] of Object.entries(pkg?.dependencies ?? {})) {
@@ -81,10 +98,17 @@ function extractDependencies(pkg) {
  */
 export async function runDiscoveryAgent({ runTool, context = {} }) {
   const pkg = await readJson(runTool, context, 'package.json');
-  const { framework, signals } = detectFramework(pkg);
+  const { framework: pkgFramework, signals } = detectFramework(pkg);
 
   // The API surface: deterministic, no LLM (docs/10 §D acceptance criterion).
+  // The tool now covers Express, FastAPI/Flask and Next, and reports which it saw.
   const routes = await runTool('discover_routes', {}, context);
+
+  // Python projects declare their framework in a requirements manifest, not
+  // package.json, so look there when the manifest did not settle it.
+  const pyFramework = pkgFramework === 'unknown'
+    ? await detectPythonFramework(runTool, context, signals)
+    : null;
 
   const config = { packageManager: 'npm', hasDockerfile: false, hasDockerCompose: false, hasEnvExample: false };
   for (const [file, flag] of CONFIG_FILES) {
@@ -95,8 +119,15 @@ export async function runDiscoveryAgent({ runTool, context = {} }) {
 
   const endpoints = routes.endpoints ?? [];
 
+  // Resolve the framework: the manifest wins; then the Python manifest; then
+  // whatever the route extractor actually detected; then express if there are
+  // endpoints at all; else unknown.
+  const framework = pkgFramework !== 'unknown'
+    ? pkgFramework
+    : (pyFramework ?? routes.framework ?? (endpoints.length ? 'express' : 'unknown'));
+
   return {
-    framework: framework === 'unknown' && endpoints.length ? 'express' : framework,
+    framework,
     frameworkSignals: signals,
     endpoints,
     endpointCount: endpoints.length,
