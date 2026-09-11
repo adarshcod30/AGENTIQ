@@ -96,10 +96,22 @@ describe('mount detection', () => {
     expect(routers).toContain('app');
     expect(routes.map((r) => `${r.method} ${r.path}`).sort()).toEqual(['GET /:id', 'POST /']);
     expect(mounts).toEqual([
-      expect.objectContaining({ prefix: '/api/users', targetVar: 'users' }),
+      expect.objectContaining({ prefix: '/api/users', targets: [{ var: 'users', import: null }] }),
     ]);
     // Composed, the surface is /api/users/:id and /api/users
     expect(joinPath('/api/users', '/:id')).toBe('/api/users/:id');
+  });
+
+  it('sees a router mounted behind middleware (app.use(prefix, mw, router))', () => {
+    const code = `
+      import express from 'express';
+      const app = express();
+      const auth = express.Router();
+      auth.post('/login', (req, res) => res.json({}));
+      app.use('/api/auth', rateLimit, auth);
+    `;
+    const { mounts } = analyzeSource(code, { filename: 'app.js' });
+    expect(mounts[0].targets).toEqual([{ var: 'rateLimit', import: null }, { var: 'auth', import: null }]);
   });
 
   it('resolves an imported router mount target to its module', () => {
@@ -110,7 +122,9 @@ describe('mount detection', () => {
       app.use('/api/runs', runs);
     `;
     const { mounts, imports } = analyzeSource(code, { filename: 'app.js' });
-    expect(mounts[0]).toEqual(expect.objectContaining({ prefix: '/api/runs', targetVar: 'runs' }));
+    expect(mounts[0]).toEqual(
+      expect.objectContaining({ prefix: '/api/runs', targets: [{ var: 'runs', import: null }] }),
+    );
     expect(imports.runs).toBe('./routes/runs.routes.js');
   });
 });

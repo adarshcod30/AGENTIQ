@@ -42,7 +42,7 @@ beforeEach(async () => {
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 describe('registry', () => {
-  it('registers exactly the nine tools in docs/01_PRD.md F1', () => {
+  it('registers exactly the tools declared in tools/index.js', () => {
     expect(TOOLS.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
 
@@ -57,6 +57,10 @@ describe('registry', () => {
       probe_headers: RISK_CLASS.NETWORK_READ,
       parse_openapi: RISK_CLASS.LOCAL_COMPUTE,
       deploy_service: RISK_CLASS.DEPLOY_WRITE,
+      fs_read: RISK_CLASS.LOCAL_FS_READ,
+      code_search: RISK_CLASS.LOCAL_FS_READ,
+      ast_extract: RISK_CLASS.LOCAL_COMPUTE,
+      discover_routes: RISK_CLASS.LOCAL_FS_READ,
     };
     for (const [name, riskClass] of Object.entries(expected)) {
       expect(getTool(name)?.riskClass, name).toBe(riskClass);
@@ -298,10 +302,10 @@ describe('withGuards', () => {
 // ── HTTP surface ─────────────────────────────────────────────────────────────
 
 describe('GET /api/mcp/tools', () => {
-  it('returns all nine with generated schemas', async () => {
+  it('returns every tool with generated schemas', async () => {
     const res = await request(app).get('/api/mcp/tools');
     expect(res.status).toBe(200);
-    expect(res.body.data.count).toBe(9);
+    expect(res.body.data.count).toBe(EXPECTED_TOOLS.length);
     expect(res.body.data.generatedFrom).toBe('zod');
     for (const t of res.body.data.tools) {
       expect(t.inputSchema.$schema, t.name).toMatch(/json-schema/);

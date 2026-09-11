@@ -82,7 +82,7 @@ describe('stdio transport', () => {
     expect(init.result.capabilities).toHaveProperty('tools');
   }, 30_000);
 
-  it('lists all nine tools to an external client', async () => {
+  it('lists every tool to an external client', async () => {
     const { responses } = await talkToStdioServer(
       [
         INITIALISE,
@@ -121,7 +121,7 @@ describe('streamable-HTTP transport', () => {
     // swallow /tools, /audit and /grants.
     const res = await request(app).get('/api/mcp/tools');
     expect(res.status).toBe(200);
-    expect(res.body.data.count).toBe(9);
+    expect(res.body.data.count).toBe(EXPECTED_TOOLS.length);
   });
 });
 
@@ -188,7 +188,7 @@ describe('streamable-HTTP transport: a real session', () => {
     expect(rpc?.result?.serverInfo?.name).toBe('agentiq');
   });
 
-  it('lists all nine tools to a client over HTTP', async () => {
+  it('lists every tool to a client over HTTP', async () => {
     const init = await post(INITIALISE);
     const sessionId = init.headers['mcp-session-id'];
 

@@ -1,11 +1,12 @@
 /**
- * Registers all nine tools.
+ * Registers every MCP tool.
  *
  * Importing a tool module registers it as a side effect, so this file is the
  * single place that decides what the server exposes. Import it once at boot;
  * `registerAllTools()` is idempotent so tests can call it freely.
  *
- * docs/01_PRD.md F1 lists exactly these nine.
+ * docs/01_PRD.md F1 lists the original nine; docs/10_AUTONOMOUS_PLATFORM.md adds the
+ * discovery tools. EXPECTED_TOOLS below is the authoritative list.
  */
 import { TOOLS } from '../registry.js';
 
@@ -25,6 +26,11 @@ export async function registerAllTools() {
     import('./probe_headers.js'),
     import('./parse_openapi.js'),
     import('./deploy_service.js'),
+    // Discovery (docs/10_AUTONOMOUS_PLATFORM.md, Phase 1).
+    import('./fs_read.js'),
+    import('./code_search.js'),
+    import('./ast_extract.js'),
+    import('./discover_routes.js'),
   ]);
 
   return TOOLS;
@@ -41,6 +47,10 @@ export const EXPECTED_TOOLS = [
   'probe_headers',
   'parse_openapi',
   'deploy_service',
+  'fs_read',
+  'code_search',
+  'ast_extract',
+  'discover_routes',
 ];
 
 export default registerAllTools;
