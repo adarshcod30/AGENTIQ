@@ -10,15 +10,27 @@
  */
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FolderPlus, Play, FolderGit2, Clock } from 'lucide-react';
+import { FolderPlus, Play, FolderGit2, Clock, KeyRound } from 'lucide-react';
 import {
-  useProjects, useCreateProject, useAssessments, useCreateAssessment,
+  useProjects, useCreateProject, useUpdateProjectEnv, useAssessments, useCreateAssessment,
 } from '@/hooks/api';
 import {
-  Card, CardHeader, CardBody, Button, Field, Input, Alert, Chip, EmptyState, SkeletonRows,
+  Card, CardHeader, CardBody, Button, Field, Input, Textarea, Alert, Chip, EmptyState, SkeletonRows,
 } from '@/components/ui';
 import { ApiError } from '@/services/api';
 import type { AssessState } from '@/types';
+
+/** KEY=VALUE per line -> an object. Blank lines and #comments ignored. */
+function parseEnv(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const i = t.indexOf('=');
+    if (i > 0) out[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+  }
+  return out;
+}
 
 const ASSESS_CHIP: Record<string, string> = {
   COMPLETE: 'bg-success-50 text-success',
@@ -35,21 +47,42 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const projects = useProjects();
   const create = useCreateProject();
+  const updateEnv = useUpdateProjectEnv();
   const runAssessment = useCreateAssessment();
   const recent = useAssessments();
 
   const [name, setName] = useState('');
   const [root, setRoot] = useState('');
+  const [envText, setEnvText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Which project's env editor is open, and its draft text.
+  const [editEnvFor, setEditEnvFor] = useState<string | null>(null);
+  const [editEnvText, setEditEnvText] = useState('');
 
   const submit = async () => {
     setError(null);
     try {
-      await create.mutateAsync({ name: name.trim(), workspaceRoot: root.trim() });
+      const runtimeEnv = parseEnv(envText);
+      await create.mutateAsync({
+        name: name.trim(), workspaceRoot: root.trim(),
+        ...(Object.keys(runtimeEnv).length ? { runtimeEnv } : {}),
+      });
       setName('');
       setRoot('');
+      setEnvText('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add the project.');
+    }
+  };
+
+  const saveEnv = async (projectId: string) => {
+    setError(null);
+    try {
+      await updateEnv.mutateAsync({ id: projectId, runtimeEnv: parseEnv(editEnvText) });
+      setEditEnvFor(null);
+      setEditEnvText('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the environment.');
     }
   };
 
@@ -91,6 +124,11 @@ export function ProjectsPage() {
               <Input id="proj-root" mono required placeholder="/Users/you/code/my-api"
                 value={root} onChange={(e) => setRoot(e.target.value)} />
             </Field>
+            <Field label="Runtime environment (optional)" htmlFor="proj-env"
+              hint="KEY=VALUE per line. Only if the app needs it to start (a database URL, a secret). Stored locally on the server, never sent back to the browser. Cannot override PORT.">
+              <Textarea id="proj-env" mono rows={3} placeholder={'MONGO_URI=mongodb://localhost:27017/app\nJWT_SECRET=…'}
+                value={envText} onChange={(e) => setEnvText(e.target.value)} />
+            </Field>
             <Button type="submit" loading={create.isPending} disabled={!name.trim() || !root.trim()}>
               <FolderPlus size={16} aria-hidden /> Add project
             </Button>
@@ -111,20 +149,45 @@ export function ProjectsPage() {
         {list.length > 0 && (
           <div className="divide-y divide-line">
             {list.map((p) => (
-              <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-ink">{p.name}</p>
-                  <p className="t-mono truncate text-[12px] text-ink-muted">{p.workspaceRoot}</p>
+              <div key={p.id} className="px-4 py-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-ink">{p.name}</p>
+                    <p className="t-mono truncate text-[12px] text-ink-muted">{p.workspaceRoot}</p>
+                  </div>
+                  {p.runtimeEnvKeys && p.runtimeEnvKeys.length > 0 && (
+                    <Chip className="bg-surface-3 text-ink-subtle">env: {p.runtimeEnvKeys.join(', ')}</Chip>
+                  )}
+                  <span className="t-small text-ink-subtle">
+                    {p.lastDiscoveryAt
+                      ? `discovered ${new Date(p.lastDiscoveryAt).toLocaleDateString()}`
+                      : 'not discovered yet'}
+                  </span>
+                  <Button size="sm" variant="secondary"
+                    onClick={() => { setEditEnvFor(editEnvFor === p.id ? null : p.id); setEditEnvText(''); }}>
+                    <KeyRound size={14} aria-hidden /> Env
+                  </Button>
+                  <Button size="sm" loading={runAssessment.isPending} onClick={() => void start(p.id)}>
+                    <Play size={15} aria-hidden /> Run assessment
+                  </Button>
                 </div>
-                <span className="t-small text-ink-subtle">
-                  {p.lastDiscoveryAt
-                    ? `discovered ${new Date(p.lastDiscoveryAt).toLocaleDateString()}`
-                    : 'not discovered yet'}
-                </span>
-                <Button size="sm" loading={runAssessment.isPending}
-                  onClick={() => void start(p.id)}>
-                  <Play size={15} aria-hidden /> Run assessment
-                </Button>
+                {editEnvFor === p.id && (
+                  <div className="mt-3 space-y-2 rounded-[6px] border border-line bg-surface-2 p-3">
+                    <p className="t-small text-ink-muted">
+                      Runtime environment the app needs to start, KEY=VALUE per line. Stored locally, never sent back to the browser.
+                      {p.runtimeEnvKeys && p.runtimeEnvKeys.length > 0 && (
+                        <> Currently set: <span className="t-mono">{p.runtimeEnvKeys.join(', ')}</span>. Re-enter all values to replace, or save empty to clear.</>
+                      )}
+                    </p>
+                    <Textarea mono rows={3} value={editEnvText}
+                      onChange={(e) => setEditEnvText(e.target.value)}
+                      placeholder={'MONGO_URI=mongodb://localhost:27017/app'} />
+                    <div className="flex gap-2">
+                      <Button size="sm" loading={updateEnv.isPending} onClick={() => void saveEnv(p.id)}>Save env</Button>
+                      <Button size="sm" variant="secondary" onClick={() => setEditEnvFor(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

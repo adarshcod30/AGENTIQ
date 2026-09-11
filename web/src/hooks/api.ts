@@ -6,7 +6,7 @@
  * (docs/04_App_UI.md §1: "Zero is zero. Empty is empty.").
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost, apiDelete } from '@/services/api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '@/services/api';
 import type {
   TestRun, McpTool, AuditEvent, ApiSpec, Grant, RiskClass, HealthStatus, HttpMethod, Finding,
   Deployment, DeployConfig, PreflightCheck,
@@ -262,8 +262,18 @@ export const useProjects = () => useQuery({
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; workspaceRoot: string }) =>
+    mutationFn: (input: { name: string; workspaceRoot: string; runtimeEnv?: Record<string, string> }) =>
       apiPost<{ project: Project }>('/projects', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}
+
+/** Set (or clear) a project's opt-in runtime env. Values go up; only keys come back. */
+export function useUpdateProjectEnv() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; runtimeEnv: Record<string, string> }) =>
+      apiPatch<{ id: string; runtimeEnvKeys: string[] }>(`/projects/${vars.id}/env`, { runtimeEnv: vars.runtimeEnv }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   });
 }

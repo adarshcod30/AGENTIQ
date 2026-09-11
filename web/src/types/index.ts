@@ -245,6 +245,8 @@ export interface Project {
   name: string;
   workspaceRoot: string;
   lastDiscoveryAt: string | null;
+  /** Names only of the opt-in runtime env; values never leave the server. */
+  runtimeEnvKeys?: string[];
   createdAt: string;
   updatedAt: string;
 }
