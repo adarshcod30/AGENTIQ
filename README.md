@@ -69,7 +69,7 @@ The third problem is the one AGENTIQ is built around.
 | **Spec grounding** | Import an OpenAPI 3.0 or 3.1 document and ground generation in an operation's declared parameters, schemas and status codes. |
 | **Security Agent** | Six probe families mapped to the OWASP API Security Top 10 (2023): SQL injection, reflected XSS, broken authentication, CORS, security headers, rate limiting. Every finding carries its payload, the signal that fired, and the baseline it deviated from. |
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
-| **MCP tool layer** | Nine registered tools with Zod schemas, four risk classes, per-host grants, an SSRF egress guard and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
+| **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
 | **Deployment Agent** | Read-only preflight against GitHub, a Render deploy, then an automatic test and scan of the live URL, all recorded together. |
 | **Trust pages** | A Tool Registry that renders live JSON Schemas from the server, and an Audit Log where denied and SSRF-blocked calls stand out. |
 | **Real dashboard** | Every figure is a MongoDB aggregation over your own runs. A new account shows honest zeros. |
@@ -212,6 +212,8 @@ decision.
 | Risk class | Meaning | Default |
 |---|---|---|
 | `local.compute` | No network: parsing, evaluation | granted automatically |
+| `local.fs.read` | Reads inside the one project workspace, jail-bounded | granted automatically |
+| `local.process` | Runs the project as a sandboxed loopback process | granted automatically |
 | `network.read` | A benign request to a host you nominated | granted per host |
 | `network.probe` | Attack-indicator payloads to a host you nominated | **explicit, per host, per session; never automatic** |
 | `deploy.write` | Changes external infrastructure | explicit grant plus confirmation |
@@ -419,8 +421,10 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
   recall show the false-positive controls working, not general-case performance.
 - **Generated suites miss three kinds of bug**: wrong types, wrong content types and off-by-one
   boundaries are never caught.
-- **Permission grants live in memory**, so a restart clears them and two instances would not share
-  them.
+- **Permission grants now survive a restart** (write-through to MongoDB, re-hydrated on boot, expired
+  by a TTL index on the same one-hour clock), but a live grant is still not shared between instances:
+  the in-memory store is per-process. Sharing live grants across a horizontally scaled deployment is
+  out of local scope.
 - **The health check reports configuration, not credentials.** An expired AWS session shows up only
   when calls fall back to Groq.
 - **Detection only.** No exploitation, and no model of business logic, so logic flaws are out of
@@ -432,7 +436,7 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
 ## Roadmap
 
 - [ ] Deploy to App Runner and S3 + CloudFront behind an OIDC pipeline
-- [ ] Persist permission grants so they survive restarts and scale out
+- [x] Persist permission grants so they survive restarts (done); sharing live grants across scaled instances remains
 - [ ] Teach generation to assert on types, content types and boundaries
 - [ ] Grow the benchmark (more endpoints, more repeats) to settle the grounding result
 - [ ] A health check that verifies provider credentials, not just configuration

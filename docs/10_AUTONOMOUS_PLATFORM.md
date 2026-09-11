@@ -324,17 +324,28 @@ Shipped: `report.service.js` (readiness verdict + structured report) and the `re
 - Acceptance: a single report shows discovered APIs, test results, findings by severity with
   evidence, recommended fixes, and a readiness verdict.
 
-**Phase 6 · Pluggable deployment. DONE (core).**
-Shipped: a `DeploymentProvider` interface and registry (`server/src/deploy/`), Render as the first implementation wrapping the existing tested orchestration, a Railway stub that proves the seam, provider-agnostic requirement detection and failure diagnosis (with behaviour-changing fixes flagged for approval), and provider selection through the routes. Follow-ups: the approval-gated auto-retry-with-fix, and surfacing provider choice in the web UI. Original plan:
+**Phase 6 · Pluggable deployment. DONE.**
+Shipped: a `DeploymentProvider` interface and registry (`server/src/deploy/`), Render as the first implementation wrapping the existing tested orchestration, a Railway stub that proves the seam, provider-agnostic requirement detection and failure diagnosis (with behaviour-changing fixes flagged for approval), and provider selection through the routes. The two follow-ups are now done in Phase 7: the approval-gated auto-retry-with-fix (`server/src/deploy/retry.js`, `retryDeployment`, `POST /api/deployments/:id/retry`), and provider choice in the web UI. Original plan:
 The `DeploymentProvider` interface; Render refactored behind it; failure diagnosis and safe retry.
 Provider choice surfaced in the UI.
 - Acceptance: Render still deploys through the new interface; a second provider stub proves the seam.
 
-**Phase 7 · Hardening for multi-project / self-host.**
-Persist grants; workspace isolation; resource limits on `local.process`; the BYOK config surface; the
-web project-list and run views finished.
-- Acceptance: two projects assessed concurrently do not see each other's workspace, grants or
-  findings.
+**Phase 7 · Hardening for multi-project / self-host. DONE.**
+Shipped:
+- Resource limits and process-group isolation for `local.process` (`procSandbox.js`): a heap cap via
+  `NODE_OPTIONS`, a wall-clock lifetime backstop, detached spawning so the whole tree is reaped
+  (`killTree`) rather than orphaning npm's child node, and a bounded stdout drain.
+- Persistent, session-isolated grants (`Grant` model, `mcp/grantPersistence.js`): write-through to
+  MongoDB with re-hydration on boot, so a grant survives a restart within its hour, keyed by
+  (userId, sessionId) so concurrent assessments never read each other's approvals. The in-memory store
+  stays the synchronous source of truth; a TTL index reaps expired rows.
+- The BYOK config surface (`settings.service.js`, `GET /api/settings/config`, the Settings page): every
+  capability, whether its keys are present, and how to obtain them. Presence only, never a value, per
+  the §G credential model.
+- The web project-list and live assessment run views, and provider choice plus the approval-gated retry
+  on the Deploy page.
+- Acceptance MET: `tests/assessment.isolation.test.js` runs two projects concurrently and proves neither
+  sees the other's workspace, grants or findings.
 
 Phases 1 to 5 deliver the autonomous local workflow. 6 and 7 make it a product.
 
