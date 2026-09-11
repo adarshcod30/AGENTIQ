@@ -298,24 +298,28 @@ workspace. `POST /api/projects` and `POST /api/projects/:id/discover`.
 - Acceptance: pointing discovery at `fixtures/vulnerable-api` returns its real routes with methods
   and path params, with no LLM call.
 
-**Phase 2 · Grounded testing.**
+**Phase 2 · Grounded testing. DONE.**
+Shipped: `runTestingAgentForEndpoint` grounds generation in a discovered endpoint with per-endpoint category selection; the `app_lifecycle` tool and `local.process` risk class start/stop the app on loopback behind a process sandbox; the intent agent infers what an endpoint does and raises a clarification when ambiguous. Original plan:
 The Testing Agent accepts a discovered `endpoint`; generation is grounded in real params and inferred
 intent; test categories are chosen per endpoint. `app_lifecycle` tool starts/stops the local app.
 - Acceptance: an assessment discovers and tests the fixture app end to end with no user-supplied URL.
 
-**Phase 3 · Static security lanes.**
+**Phase 3 · Static security lanes. DONE.**
+Shipped: `secret_scan`, `sast_scan`, `config_scan`, `dep_audit` tools with pure, tested cores; one shared finding shape with a confidence ladder; `runSecurityAssessment` runs both lanes, maps, de-duplicates and correlates. Original plan:
 `dep_audit`, `secret_scan`, `sast_scan`, `config_scan` tools; the Security Agent gains the SAST lane;
 findings are normalized, de-duplicated and correlated with DAST.
 - Acceptance: the vulnerable fixture yields both a DAST finding and a corroborating SAST finding on
   the same route, merged into one.
 
-**Phase 4 · Orchestrator and jobs.**
+**Phase 4 · Orchestrator and jobs. DONE.**
+Shipped: the `Assessment` state machine and orchestrator (discover -> test -> scan -> analyze -> report), an in-process job queue, per-phase persistence with resume, a live timeline via polling, and the `/api/assessments` routes. Original plan:
 The `Assessment` model and state machine; an in-process job queue and worker (no external broker for
 local mode); a progress event stream; resume from last phase. Routes become thin enqueue calls.
 - Acceptance: one `POST /api/assessments` drives discover → test → assess → analyze → report, with a
   live phase timeline, and resumes after a kill.
 
-**Phase 5 · Consolidated report and approval.**
+**Phase 5 · Consolidated report and approval. MOSTLY DONE.**
+Shipped: `report.service.js` (readiness verdict + structured report) and the `report_render` tool (Markdown). The web report page and an explicit approval gate before DEPLOY remain, and belong with Phase 6. Original plan:
 `report_render` tool; the report page in the web app; the approval gate.
 - Acceptance: a single report shows discovered APIs, test results, findings by severity with
   evidence, recommended fixes, and a readiness verdict.
