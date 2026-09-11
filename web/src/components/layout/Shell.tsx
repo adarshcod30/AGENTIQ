@@ -18,7 +18,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, PlayCircle, ShieldCheck, FileJson, ArrowLeftRight,
-  History, UploadCloud, Wrench, ScrollText, Info, Plus, Menu, Settings,
+  History, UploadCloud, Wrench, ScrollText, Info, Plus, Menu, Settings, FolderGit2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -30,6 +30,7 @@ import type { HealthStatus } from '@/types';
 
 const WORK = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/projects', label: 'Projects', icon: FolderGit2 },
   { to: '/run', label: 'Test Runner', icon: PlayCircle },
   { to: '/security', label: 'Security', icon: ShieldCheck },
   { to: '/specs', label: 'Specs', icon: FileJson },

@@ -21,6 +21,8 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { SecurityPage } from '@/pages/SecurityPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ApiClientPage } from '@/pages/ApiClientPage';
+import { ProjectsPage } from '@/pages/ProjectsPage';
+import { AssessmentDetailPage } from '@/pages/AssessmentDetailPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -39,6 +41,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
+      { path: 'projects', element: <ProjectsPage /> },
+      { path: 'assessments/:id', element: <AssessmentDetailPage /> },
       { path: 'run', element: <TestRunnerPage /> },
       { path: 'run/:id', element: <RunDetailPage /> },
       { path: 'security', element: <SecurityPage /> },
