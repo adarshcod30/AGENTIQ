@@ -8,8 +8,8 @@
  */
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle, UploadCloud } from 'lucide-react';
-import { useAssessment, useAnswerClarification } from '@/hooks/api';
+import { ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle, UploadCloud, Download } from 'lucide-react';
+import { useAssessment, useAnswerClarification, downloadAssessmentReport } from '@/hooks/api';
 import { ProgressList, type ProgressStep, type StepState } from '@/components/ui/ProgressList';
 import {
   Card, CardHeader, CardBody, Button, Field, Input, Alert, Chip, SeverityChip, Skeleton, EmptyState,
@@ -235,7 +235,14 @@ export function AssessmentDetailPage() {
 
       {a.report && (
         <Card>
-          <CardHeader title="Consolidated report" />
+          <CardHeader
+            title="Consolidated report"
+            actions={(
+              <Button size="sm" variant="secondary" onClick={() => { void downloadAssessmentReport(a._id); }}>
+                <Download size={14} aria-hidden /> Download
+              </Button>
+            )}
+          />
           <CardBody className="space-y-4">
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
               <span><span className="t-label">Framework</span> {a.report.project.framework}</span>

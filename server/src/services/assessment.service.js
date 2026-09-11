@@ -21,7 +21,7 @@ import { Assessment, ASSESS_STATE, canTransition } from '../models/Assessment.js
 import { Discovery } from '../models/Discovery.js';
 import { Project } from '../models/Project.js';
 import { assessmentQueue } from '../lib/jobQueue.js';
-import { buildReport, computeReadiness } from './report.service.js';
+import { buildReport, computeReadiness, renderReportMarkdown } from './report.service.js';
 import { logger } from '../lib/logger.js';
 
 export class AssessmentError extends Error {
@@ -286,6 +286,18 @@ export async function listAssessments({ userId, projectId = null }) {
 
 export async function getAssessment({ userId, assessmentId }) {
   return Assessment.findOne({ _id: assessmentId, userId }).lean();
+}
+
+/**
+ * Renders a completed assessment's report to Markdown for download. Scoped to
+ * the owner, like getAssessment. Returns null when there is no such assessment,
+ * or { ready: false } when the report has not been assembled yet.
+ */
+export async function getAssessmentReport({ userId, assessmentId }) {
+  const assessment = await Assessment.findOne({ _id: assessmentId, userId }).lean();
+  if (!assessment) return null;
+  if (!assessment.report) return { ready: false, markdown: null };
+  return { ready: true, markdown: renderReportMarkdown(assessment.report) };
 }
 
 /** Records a clarification answer and resumes a paused assessment. */

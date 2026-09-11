@@ -10,7 +10,8 @@ import { z } from 'zod';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 import {
-  createAssessment, listAssessments, getAssessment, answerClarification, AssessmentError,
+  createAssessment, listAssessments, getAssessment, getAssessmentReport,
+  answerClarification, AssessmentError,
 } from '../services/assessment.service.js';
 
 const router = Router();
@@ -53,6 +54,14 @@ router.get('/:id', protectRoute, async (req, res) => {
   const assessment = await getAssessment({ userId: req.user._id, assessmentId: req.params.id });
   if (!assessment) return fail(res, 404, 'NOT_FOUND', 'Assessment not found');
   return ok(res, { assessment });
+});
+
+/** The consolidated report as Markdown, for download. Owner-scoped. */
+router.get('/:id/report', protectRoute, async (req, res) => {
+  const result = await getAssessmentReport({ userId: req.user._id, assessmentId: req.params.id });
+  if (!result) return fail(res, 404, 'NOT_FOUND', 'Assessment not found');
+  if (!result.ready) return fail(res, 409, 'REPORT_NOT_READY', 'The report is not ready until the assessment completes.');
+  return ok(res, { markdown: result.markdown, filename: `assessment-${req.params.id}.md` });
 });
 
 router.post('/:id/answer', protectRoute, async (req, res) => {
