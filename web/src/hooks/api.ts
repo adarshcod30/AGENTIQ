@@ -10,6 +10,7 @@ import { apiGet, apiPost, apiDelete } from '@/services/api';
 import type {
   TestRun, McpTool, AuditEvent, ApiSpec, Grant, RiskClass, HealthStatus, HttpMethod, Finding,
   Deployment, DeployConfig, PreflightCheck,
+  Project, Assessment, SettingsConfig,
 } from '@/types';
 
 /* ── Health ───────────────────────────────────────────────────────────────── */
@@ -191,6 +192,7 @@ export function useSendRequest() {
 /* ── Deployment (F5) ──────────────────────────────────────────────────────── */
 
 export interface DeployInput {
+  provider: string;
   repo: string;
   branch: string;
   serviceName: string;
@@ -233,4 +235,77 @@ export const useDeployments = (limit = 20) => useQuery({
   queryKey: ['deployments', limit],
   queryFn: () => apiGet<{ total: number; count: number; deployments: Deployment[] }>(
     '/deployments', { limit }),
+});
+
+/** Approval-gated retry of a failed deployment (config-only, per the service). */
+export function useRetryDeploy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; approved: boolean; envVars: Record<string, string> }) =>
+      apiPost<{ deployment: Deployment }>(`/deployments/${vars.id}/retry`, {
+        approved: vars.approved, envVars: vars.envVars,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deployments'] });
+      qc.invalidateQueries({ queryKey: ['mcp', 'audit'] });
+    },
+  });
+}
+
+/* ── Projects and assessments (autonomous platform) ───────────────────────── */
+
+export const useProjects = () => useQuery({
+  queryKey: ['projects'],
+  queryFn: () => apiGet<{ projects: Project[] }>('/projects'),
+});
+
+export function useCreateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; workspaceRoot: string }) =>
+      apiPost<{ project: Project }>('/projects', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}
+
+export const useAssessments = (projectId?: string) => useQuery({
+  queryKey: ['assessments', { projectId: projectId ?? null }],
+  queryFn: () => apiGet<{ assessments: Assessment[] }>('/assessments', projectId ? { projectId } : undefined),
+});
+
+export function useCreateAssessment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string; pauseOnClarification?: boolean }) =>
+      apiPost<{ assessment: Assessment }>('/assessments', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['assessments'] }),
+  });
+}
+
+/** A live phase timeline: poll while the assessment is still running. */
+export const useAssessment = (id: string | undefined) => useQuery({
+  queryKey: ['assessments', id],
+  queryFn: () => apiGet<{ assessment: Assessment }>(`/assessments/${id}`),
+  enabled: Boolean(id),
+  refetchInterval: (query) => {
+    const state = query.state.data?.assessment?.state;
+    const done = state === 'COMPLETE' || state === 'FAILED' || state === 'AWAITING_INPUT';
+    return done ? false : 1500;
+  },
+});
+
+export function useAnswerClarification(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { endpoint: string; answer: string }) =>
+      apiPost<{ assessment: Assessment }>(`/assessments/${id}/answer`, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['assessments', id] }),
+  });
+}
+
+/* ── Self-host configuration (BYOK) ───────────────────────────────────────── */
+
+export const useSettingsConfig = () => useQuery({
+  queryKey: ['settings', 'config'],
+  queryFn: () => apiGet<SettingsConfig>('/settings/config'),
 });

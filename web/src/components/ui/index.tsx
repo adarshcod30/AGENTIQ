@@ -190,6 +190,8 @@ const SEVERITY_CHIP: Record<Severity, string> = {
 
 const RISK_CHIP: Record<RiskClass, string> = {
   'local.compute': 'bg-surface-3 text-ink-muted',
+  'local.fs.read': 'bg-surface-3 text-ink-muted',
+  'local.process': 'bg-info-50 text-info',
   'network.read': 'bg-info-50 text-info',
   'network.probe': 'bg-warning-50 text-warning',
   'deploy.write': 'bg-danger-50 text-danger',

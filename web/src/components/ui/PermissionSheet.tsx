@@ -25,6 +25,16 @@ const COPY: Record<RiskClass, { label: string; description: string }> = {
     label: 'Local computation',
     description: 'Parsing and evaluation only. No network access.',
   },
+  // Auto-granted, jail- and sandbox-bounded, so these never actually open the
+  // sheet. The copy exists so the map is exhaustive and any future use is honest.
+  'local.fs.read': {
+    label: 'Read the project workspace',
+    description: 'Reads files inside the one project workspace under assessment, and nowhere else.',
+  },
+  'local.process': {
+    label: 'Run the project locally',
+    description: 'Starts and stops the project as a sandboxed local process on loopback only.',
+  },
   'network.read': {
     label: 'Send benign requests',
     description: 'Ordinary requests to this host, reading the responses.',

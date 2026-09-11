@@ -18,10 +18,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  UploadCloud, CheckCircle2, AlertTriangle, XCircle, Rocket, ExternalLink, ShieldCheck,
+  UploadCloud, CheckCircle2, AlertTriangle, XCircle, Rocket, ExternalLink, ShieldCheck, RotateCw,
 } from 'lucide-react';
 import {
-  useDeployConfig, usePreflight, useDeploy, useDeployments, useGrantHost,
+  useDeployConfig, usePreflight, useDeploy, useDeployments, useGrantHost, useRetryDeploy,
   type DeployInput,
 } from '@/hooks/api';
 import { PermissionSheet, type PermissionRequest } from '@/components/ui/PermissionSheet';
@@ -62,6 +62,7 @@ export function DeployPage() {
   const history = useDeployments();
 
   const [form, setForm] = useState({
+    provider: 'render',
     repo: '', branch: 'main', serviceName: '',
     runtime: 'node' as DeployInput['runtime'],
     plan: 'free' as DeployInput['plan'],
@@ -73,11 +74,14 @@ export function DeployPage() {
   const [error, setError] = useState<string | null>(null);
 
   const input = (): DeployInput => ({
+    provider: form.provider,
     repo: form.repo.trim(), branch: form.branch.trim(), serviceName: form.serviceName.trim(),
     runtime: form.runtime, plan: form.plan, region: form.region,
     buildCommand: form.buildCommand, startCommand: form.startCommand,
     envVars: parseEnv(form.envText), dryRun: form.dryRun,
   });
+
+  const providers = config.data?.providers ?? [];
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -159,6 +163,25 @@ export function DeployPage() {
             <CardHeader title="Service" />
             <CardBody>
               <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void runPreflight(); }}>
+                {providers.length > 0 && (
+                  <Field label="Provider" htmlFor="provider"
+                    hint={
+                      providers.find((p) => p.name === form.provider)?.configured
+                        ? undefined
+                        : 'This provider has no credential configured, so a deploy will not start.'
+                    }>
+                    <Select id="provider" value={form.provider}
+                      onChange={(e) => set('provider', e.target.value)}>
+                      {providers.map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.displayName}{p.status === 'stub' ? ' (preview)' : ''}
+                          {p.configured ? '' : ' - not configured'}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+
                 <Field label="GitHub repository" htmlFor="repo" required>
                   <Input id="repo" mono required placeholder="https://github.com/owner/repo"
                     value={form.repo} onChange={(e) => set('repo', e.target.value)} />
@@ -340,6 +363,7 @@ function DeploymentResult({ deployment, skipped }: { deployment: Deployment; ski
               ))}
             </div>
           )}
+          {deployment.diagnosis && <RetryPanel deployment={deployment} />}
         </CardBody>
       </Card>
     );
@@ -387,5 +411,94 @@ function DeploymentResult({ deployment, skipped }: { deployment: Deployment; ski
         )}
       </CardBody>
     </Card>
+  );
+}
+
+/**
+ * The diagnosis and, when the fix is config the platform may set, an
+ * approval-gated retry. A code-change fix is shown as guidance with no retry
+ * button: the platform proposes it and the user applies it, never the reverse.
+ */
+function RetryPanel({ deployment }: { deployment: Deployment }) {
+  const retry = useRetryDeploy();
+  const diagnosis = deployment.diagnosis;
+  const proposal = diagnosis?.proposal;
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [freeText, setFreeText] = useState('');
+  const [approved, setApproved] = useState(false);
+
+  if (!diagnosis) return null;
+
+  const isSetEnv = proposal?.kind === 'set-env';
+  const named = proposal?.requiredEnvVars ?? [];
+
+  const envVars = (): Record<string, string> => {
+    if (named.length) return named.reduce((acc, k) => ({ ...acc, [k]: values[k] ?? '' }), {});
+    return parseEnv(freeText);
+  };
+
+  const canRetry = isSetEnv && approved && !retry.isPending
+    && (named.length ? named.every((k) => (values[k] ?? '').length > 0) : Object.keys(parseEnv(freeText)).length > 0);
+
+  const retried = retry.data?.deployment;
+
+  return (
+    <div className="space-y-3 rounded-[6px] border border-line bg-surface-2 p-3">
+      <div>
+        <p className="text-[13px] font-medium text-ink">Diagnosis: {diagnosis.classification}</p>
+        <p className="t-small mt-0.5 text-ink-muted">{diagnosis.explanation}</p>
+        <p className="t-small mt-1 text-ink">{proposal?.message ?? diagnosis.suggestion}</p>
+      </div>
+
+      {proposal?.kind === 'code-change' && (
+        <Alert tone="info" title="This needs a code change">
+          AGENTIQ does not edit your repository. Apply the change above, then deploy again.
+        </Alert>
+      )}
+
+      {isSetEnv && (
+        <>
+          {named.length > 0 ? (
+            <div className="space-y-2">
+              {named.map((k) => (
+                <Field key={k} label={k} htmlFor={`env-${k}`}>
+                  <Input id={`env-${k}`} mono value={values[k] ?? ''}
+                    onChange={(e) => setValues((v) => ({ ...v, [k]: e.target.value }))} />
+                </Field>
+              ))}
+            </div>
+          ) : (
+            <Field label="Environment variables" htmlFor="retry-env"
+              hint="One KEY=VALUE per line. Set on the service and used for the redeploy; not stored by AGENTIQ.">
+              <Textarea id="retry-env" mono rows={3} value={freeText}
+                onChange={(e) => setFreeText(e.target.value)} placeholder={'API_KEY=…'} />
+            </Field>
+          )}
+
+          <Checkbox id="retry-approve" checked={approved}
+            onChange={(e) => setApproved(e.target.checked)}
+            label="I approve setting this configuration and redeploying"
+            hint="The deploy permission is re-checked exactly as for a first deployment." />
+
+          <Button size="sm" disabled={!canRetry} loading={retry.isPending}
+            onClick={() => retry.mutate({ id: deployment._id, approved, envVars: envVars() })}>
+            <RotateCw size={15} aria-hidden /> Set config and redeploy
+          </Button>
+        </>
+      )}
+
+      {retry.error && (
+        <Alert tone="danger">
+          {retry.error instanceof ApiError ? retry.error.message : 'The retry could not start.'}
+        </Alert>
+      )}
+
+      {retried && (
+        <Alert tone={retried.state === 'COMPLETE' ? 'success' : 'info'}>
+          Retry started as a new deployment ({retried.state}).{' '}
+          {retried.error?.message ?? 'Watch it in Recent deployments below.'}
+        </Alert>
+      )}
+    </div>
   );
 }

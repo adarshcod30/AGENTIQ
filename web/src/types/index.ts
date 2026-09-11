@@ -7,7 +7,9 @@
  */
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
-export type RiskClass = 'local.compute' | 'network.read' | 'network.probe' | 'deploy.write';
+export type RiskClass =
+  | 'local.compute' | 'local.fs.read' | 'local.process'
+  | 'network.read' | 'network.probe' | 'deploy.write';
 export type AuditOutcome = 'ok' | 'denied' | 'error' | 'blocked_ssrf' | 'rate_limited';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
@@ -174,6 +176,31 @@ export interface PreflightCheck {
   detail: string;
 }
 
+/** What a retry can do: config the platform may set, or a code change it will not. */
+export interface RetryProposal {
+  retryable: boolean;
+  kind: 'set-env' | 'code-change' | 'none';
+  requiredEnvVars: string[];
+  requiresApproval: boolean;
+  message: string;
+}
+
+export interface DeployDiagnosis {
+  classification: string;
+  explanation: string;
+  suggestion: string;
+  safeFix: { type?: string; key?: string | null; behaviourChanging?: boolean } | null;
+  proposal?: RetryProposal;
+}
+
+export interface DeployProvider {
+  name: string;
+  displayName: string;
+  status: 'available' | 'stub';
+  requiresCredential: string;
+  configured: boolean;
+}
+
 export interface Deployment {
   _id: string;
   provider: string;
@@ -186,6 +213,8 @@ export interface Deployment {
   serviceId: string | null;
   deployId: string | null;
   liveUrl: string | null;
+  diagnosis?: DeployDiagnosis | null;
+  retryOf?: string | null;
   postDeployRunId: string | null;
   verification?: {
     testsPassed: number;
@@ -201,8 +230,96 @@ export interface Deployment {
 export interface DeployConfig {
   configured: boolean;
   provider: string;
+  providers: DeployProvider[];
   preflightHosts: string[];
   autoVerifyFamilies: string[];
   requiresApprovalFamilies: string[];
   note: string;
+}
+
+/* ── Projects and assessments (autonomous platform, Phase 1-7) ─────────────── */
+
+export interface Project {
+  id: string;
+  _id?: string;
+  name: string;
+  workspaceRoot: string;
+  lastDiscoveryAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AssessState =
+  | 'PENDING' | 'DISCOVERING' | 'TESTING' | 'AWAITING_INPUT'
+  | 'SCANNING' | 'ANALYZING' | 'REPORTING' | 'COMPLETE' | 'FAILED';
+
+export interface AssessmentEndpoint {
+  method: string;
+  path: string;
+  intent: string | null;
+  confidence: string | null;
+  passed: number;
+  failed: number;
+  errored: number;
+  status: 'complete' | 'skipped' | 'failed';
+  note?: string;
+}
+
+export interface AssessmentFinding {
+  lane: string;
+  category: string;
+  severity: Severity | 'info';
+  confidence: string;
+  title: string;
+  description: string;
+  evidence: string;
+  remediation: string;
+  owasp: string | null;
+  location: { file: string | null; line: number | null; endpoint: string | null };
+}
+
+export interface Clarification {
+  endpoint: string;
+  question: string;
+  answer: string | null;
+}
+
+export interface Assessment {
+  _id: string;
+  projectId: string;
+  state: AssessState;
+  stateHistory: { state: AssessState; at: string; note?: string }[];
+  baseUrl: string | null;
+  endpoints: AssessmentEndpoint[];
+  security: {
+    findings: AssessmentFinding[];
+    summary: { total: number; bySeverity: Record<string, number> } | null;
+    notes: string[];
+  };
+  clarifications: Clarification[];
+  readiness: { ready: boolean; blockers: string[]; warnings: string[] };
+  report: unknown | null;
+  error?: { code: string; message: string };
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/* ── Self-host configuration surface (BYOK) ────────────────────────────────── */
+
+export interface SettingsConfig {
+  byok: string;
+  capabilities: {
+    name: string;
+    mode: 'all' | 'any';
+    configured: boolean;
+    keys: { key: string; present: boolean; guidance: string }[];
+  }[];
+  deployProviders: {
+    name: string;
+    displayName: string;
+    status: 'available' | 'stub';
+    configured: boolean;
+    key: string;
+    guidance: string;
+  }[];
 }
