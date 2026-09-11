@@ -42,6 +42,10 @@ const FORBIDDEN = [
   { name: "import 'http'", pattern: /from\s+['"]https?['"]/ },
   { name: 'net/tls socket', pattern: /from\s+['"]node:(net|tls|dgram)['"]/ },
   { name: 'child_process', pattern: /from\s+['"]node:child_process['"]/ },
+  // The filesystem is an attack surface too: an agent or route that reads files
+  // directly bypasses the jail (mcp/fsJail.js), the way raw axios bypasses the
+  // egress guard. File access must go through the fs tools, which are jailed.
+  { name: "import 'node:fs'", pattern: /from\s+['"]node:fs(\/promises)?['"]/ },
   { name: 'undici', pattern: /from\s+['"]undici['"]/ },
   { name: 'got/node-fetch', pattern: /from\s+['"](got|node-fetch|superagent|request)['"]/ },
 ];
