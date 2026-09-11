@@ -16,7 +16,9 @@
  * on its own adds nothing; a deployment that verifies itself is the point of F5.
  */
 import { Deployment, DEPLOY_STATE } from '../models/Deployment.js';
-import { runPreflight, runDeploy, CHECK } from '../agents/deployment.agent.js';
+import { CHECK } from '../agents/deployment.agent.js';
+import { getProvider, PROVIDER_NAMES } from '../deploy/index.js';
+import { detectRequirements } from '../deploy/requirements.js';
 import { runSecurityAgent } from '../agents/security.agent.js';
 import { startRun } from './run.service.js';
 import { getTool } from '../mcp/registry.js';
@@ -86,7 +88,9 @@ export function missingGrants({ userId, sessionId }) {
 export async function preflightOnly({ userId, sessionId = 'default', input, runTool, githubApi }) {
   const context = { userId, sessionId };
   const tool = runTool ?? defaultRunTool(context);
-  return runPreflight({ ...input, runTool: tool, context, ...(githubApi ? { githubApi } : {}) });
+  const provider = getProvider(input.provider ?? 'render');
+  if (!provider) throw Object.assign(new Error(`Unknown provider: ${input.provider}`), { code: 'UNKNOWN_PROVIDER' });
+  return provider.preflight(input, { runTool: tool, context, githubApi });
 }
 
 /**
@@ -107,9 +111,15 @@ export async function startDeployment({
   llm,
   verify = true,
 }) {
+  const providerName = input.provider ?? 'render';
+  const provider = getProvider(providerName);
+  if (!provider) {
+    throw Object.assign(new Error(`Unknown deployment provider: ${providerName}. Choose one of ${PROVIDER_NAMES.join(', ')}.`), { code: 'UNKNOWN_PROVIDER' });
+  }
+
   const dep = await Deployment.create({
     userId,
-    provider: 'render',
+    provider: providerName,
     repo: input.repo,
     branch: input.branch ?? 'main',
     serviceName: input.serviceName,
@@ -122,8 +132,8 @@ export async function startDeployment({
   const tool = runTool ?? defaultRunTool(context);
 
   // ── PHASE 1: preflight ───────────────────────────────────────────────────
-  const pre = await runPreflight({
-    ...input, runTool: tool, context, ...(githubApi ? { githubApi } : {}),
+  const pre = await provider.preflight(input, {
+    runTool: tool, context, ...(githubApi ? { githubApi } : {}),
   });
   dep.preflight = pre.checks;
   await dep.save();
@@ -147,8 +157,7 @@ export async function startDeployment({
 
   let result;
   try {
-    result = await runDeploy({
-      ...input,
+    result = await provider.deploy(input, {
       runTool: tool,
       context,
       ...(sleep ? { sleep } : {}),
@@ -157,7 +166,16 @@ export async function startDeployment({
     });
   } catch (err) {
     logger.warn({ deploymentId: String(dep._id), err: err.message }, 'deployment failed');
+    dep.diagnosis = provider.diagnoseFailure?.(err.message, detectRequirements(null)) ?? null;
     return finish(dep, DEPLOY_STATE.DEPLOY_FAILED, err);
+  }
+
+  // A provider stub (or any provider that declines) returns notImplemented.
+  if (result.notImplemented) {
+    return finish(dep, DEPLOY_STATE.DEPLOY_FAILED, Object.assign(
+      new Error(result.message ?? `The ${providerName} provider is not implemented.`),
+      { code: 'PROVIDER_NOT_IMPLEMENTED' },
+    ));
   }
 
   dep.serviceId = result.serviceId ?? null;
@@ -175,6 +193,8 @@ export async function startDeployment({
   }
 
   if (!result.ok) {
+    const logs = result.error ?? result.logs ?? `Deploy ended in state "${result.deployStatus}".`;
+    dep.diagnosis = provider.diagnoseFailure?.(logs, detectRequirements(null)) ?? null;
     return finish(dep, DEPLOY_STATE.DEPLOY_FAILED, Object.assign(
       new Error(result.error ?? `Deploy ended in state "${result.deployStatus}".`),
       { code: 'DEPLOY_FAILED' },

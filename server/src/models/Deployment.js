@@ -43,6 +43,9 @@ const deploymentSchema = new mongoose.Schema({
   deployId: { type: String, default: null },
   liveUrl: { type: String, default: null },
 
+  /** Failure diagnosis (deploy/diagnose.js): classification, explanation, a proposed fix. */
+  diagnosis: { type: mongoose.Schema.Types.Mixed, default: null },
+
   /**
    * The whole point of F5: the runs executed against the LIVE url after the
    * deploy succeeded. A deployment with no post-deploy verification is just a

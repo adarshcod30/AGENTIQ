@@ -12,12 +12,14 @@ import {
   missingGrants, isConfigured,
   AUTO_VERIFY_FAMILIES, REQUIRES_APPROVAL_FAMILIES, PREFLIGHT_HOSTS,
 } from '../services/deployment.service.js';
+import { listProviders, PROVIDER_NAMES } from '../deploy/index.js';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 
 const router = Router();
 
 const deploySchema = z.object({
+  provider: z.enum(PROVIDER_NAMES).default('render'),
   repo: z.url({ error: 'A full https://github.com/owner/repo URL is required' }),
   branch: z.string().min(1).default('main'),
   serviceName: z.string().min(1).max(90),
@@ -36,6 +38,7 @@ const sessionOf = (req) => req.get('x-session-id') ?? String(req.user._id);
 router.get('/config', protectRoute, (req, res) => ok(res, {
   configured: isConfigured(),
   provider: 'render',
+  providers: listProviders(),
   preflightHosts: PREFLIGHT_HOSTS,
   autoVerifyFamilies: AUTO_VERIFY_FAMILIES,
   requiresApprovalFamilies: REQUIRES_APPROVAL_FAMILIES,
@@ -108,5 +111,7 @@ router.get('/:id', protectRoute, async (req, res) => {
   if (!deployment) return fail(res, 404, 'NOT_FOUND', 'No such deployment.');
   return ok(res, { deployment });
 });
+
+router.get('/providers', protectRoute, (req, res) => ok(res, { providers: listProviders() }));
 
 export default router;
