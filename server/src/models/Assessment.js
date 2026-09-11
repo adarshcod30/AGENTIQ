@@ -56,6 +56,15 @@ const endpointResultSchema = new mongoose.Schema({
   errored: Number,
   status: String, // 'complete' | 'skipped' | 'failed'
   note: String,
+  /**
+   * A compact record of what failed, by test category, so the guidance engine
+   * can say WHY (a failing negative case means input is not validated; a failing
+   * positive case means the happy path is broken) rather than only a count.
+   */
+  failures: {
+    type: [{ category: String, name: String, reason: String, _id: false }],
+    default: undefined,
+  },
 }, { _id: false });
 
 const findingSchema = new mongoose.Schema({

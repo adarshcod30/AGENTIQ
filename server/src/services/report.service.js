@@ -7,6 +7,7 @@
  * tool; keeping the DATA here means the verdict is computed once and testable
  * without any formatting.
  */
+import { buildRecommendations, summariseRecommendations, PRIORITY_LABEL } from './guidance.js';
 
 const isBlockingSeverity = (s) => s === 'critical' || s === 'high';
 
@@ -51,6 +52,7 @@ export function buildReport(assessment, model) {
   const passed = tested.reduce((n, e) => n + (e.passed ?? 0), 0);
   const failed = tested.reduce((n, e) => n + (e.failed ?? 0), 0);
   const findings = assessment.security?.findings ?? [];
+  const recommendations = buildRecommendations({ assessment, model });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -79,6 +81,9 @@ export function buildReport(assessment, model) {
     },
     readiness: assessment.readiness ?? { ready: false, blockers: [], warnings: [] },
     clarifications: (assessment.clarifications ?? []).map((c) => ({ endpoint: c.endpoint, question: c.question, answer: c.answer })),
+    // The advisory layer: why each issue happened and how to fix it, prioritised.
+    recommendations,
+    recommendationSummary: summariseRecommendations(recommendations),
   };
 }
 
@@ -92,6 +97,19 @@ export function renderReportMarkdown(report) {
   w(`## Readiness: ${r.ready ? 'READY' : 'NOT READY'}`, '');
   if (r.blockers?.length) w('**Blockers:**', ...r.blockers.map((b) => `- ${b}`), '');
   if (r.warnings?.length) w('**Warnings:**', ...r.warnings.map((x) => `- ${x}`), '');
+
+  const recs = report.recommendations ?? [];
+  if (recs.length) {
+    w('## Recommendations', '', 'What to fix, why it matters, and how, in priority order.', '');
+    for (const rec of recs) {
+      w(`### [${PRIORITY_LABEL[rec.priority] ?? rec.priority}] ${rec.stage}: ${rec.title}`,
+        `- Why: ${rec.why}`,
+        `- Fix: ${rec.fix}`,
+        ...(rec.where?.length ? [`- Where: ${rec.where.join(', ')}`] : []),
+        ...(rec.tips?.length ? ['- Tips:', ...rec.tips.map((tip) => `  - ${tip}`)] : []),
+        '');
+    }
+  }
 
   w('## Project', '',
     `- Framework: ${report.project.framework}`,

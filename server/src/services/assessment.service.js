@@ -55,6 +55,24 @@ function makeRunTool(context) {
   return (name, input, extra = {}) => getTool(name).handler(input, { ...context, ...extra });
 }
 
+/**
+ * A compact record of what failed in a test run, kept per endpoint so the
+ * guidance engine can explain WHY. Keeps the test category (the strongest
+ * signal: a failing negative case means input is not validated) and the first
+ * failing assertion as the reason.
+ */
+function compactFailures(functional = []) {
+  return functional
+    .filter((f) => f.status !== 'pass')
+    .slice(0, 5)
+    .map((f) => {
+      const bad = (f.assertions ?? []).find((a) => !a.pass);
+      const reason = f.error
+        ?? (bad ? `${bad.kind}: expected ${bad.expected}, got ${bad.actual}` : 'an assertion failed');
+      return { category: f.category ?? null, name: f.name, reason: String(reason).slice(0, 240) };
+    });
+}
+
 /** Default phase implementations; tests override any of these. */
 export function defaultDeps() {
   return {
@@ -139,11 +157,13 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification })
         endpoint, baseUrl: app.baseUrl, intent: intent?.intent ?? null,
         runTool: ctx.runTool, context: ctx.context,
       });
+      const failures = compactFailures(result.functional);
       assessment.endpoints.push({
         method: endpoint.method, path: endpoint.path, intent: intent?.intent ?? null,
         confidence: intent?.confidence ?? null, status: 'complete',
         passed: result.summary?.passed ?? 0, failed: result.summary?.failed ?? 0,
         errored: result.summary?.errored ?? 0,
+        ...(failures.length ? { failures } : {}),
       });
     } catch (err) {
       assessment.endpoints.push({
