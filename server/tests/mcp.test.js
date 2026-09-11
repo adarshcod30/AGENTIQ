@@ -312,7 +312,9 @@ describe('GET /api/mcp/tools', () => {
   it('describes every risk class for the permission sheet', async () => {
     const res = await request(app).get('/api/mcp/tools');
     const names = res.body.data.riskClasses.map((c) => c.name).sort();
-    expect(names).toEqual(['deploy.write', 'local.compute', 'network.probe', 'network.read']);
+    expect(names).toEqual(
+      ['deploy.write', 'local.compute', 'local.fs.read', 'network.probe', 'network.read'],
+    );
     const probe = res.body.data.riskClasses.find((c) => c.name === 'network.probe');
     expect(probe.autoGranted).toBe(false);
   });

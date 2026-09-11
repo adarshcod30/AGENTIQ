@@ -14,6 +14,7 @@
 
 export const RISK_CLASS = {
   LOCAL_COMPUTE: 'local.compute',
+  LOCAL_FS_READ: 'local.fs.read',
   NETWORK_READ: 'network.read',
   NETWORK_PROBE: 'network.probe',
   DEPLOY_WRITE: 'deploy.write',
@@ -26,6 +27,16 @@ export const RISK_CLASS_META = {
   [RISK_CLASS.LOCAL_COMPUTE]: {
     label: 'Local computation',
     description: 'Parsing and evaluation only. No network access.',
+    autoGranted: true,
+    requiresHost: false,
+    requiresConfirmation: false,
+  },
+  [RISK_CLASS.LOCAL_FS_READ]: {
+    label: 'Read the project workspace',
+    description:
+      'Reads files inside the one project workspace under assessment, and nowhere else. ' +
+      'The filesystem jail (mcp/fsJail.js) enforces the boundary, which is why this is ' +
+      'safe to auto-grant: a tool cannot read outside the workspace root it was given.',
     autoGranted: true,
     requiresHost: false,
     requiresConfirmation: false,
