@@ -149,9 +149,14 @@ export function buildRecommendations({ assessment, model } = {}) {
     recs.push(rec({
       stage: 'Discovery', priority: P.HIGH,
       title: 'The app could not be started, so its endpoints were not exercised',
-      why: 'AGENTIQ starts your app on loopback to test it. It found no dev/start/serve script, or the app failed to bind the port before the readiness timeout.',
-      fix: 'Add a start script that binds to process.env.PORT and listens on 127.0.0.1.',
-      tips: ['Bind to process.env.PORT, never a hardcoded port', 'Give required env vars safe local defaults, the sandbox scrubs secrets', 'A DB-backed app may need its database reachable to start'],
+      why: 'AGENTIQ starts your app on loopback and waits for it to bind the port it was given (process.env.PORT). It timed out, usually because the app binds a hardcoded port, needs a database or secrets the sandbox does not provide, its packages are not installed, or the start script launches more than one service (a monorepo dev script that runs a backend and a frontend together).',
+      fix: 'Point AGENTIQ at the single service you want tested, with a start script that binds process.env.PORT.',
+      tips: [
+        'For a monorepo, register the backend/server subfolder as its own project, not the repository root',
+        'Bind to process.env.PORT, never a hardcoded port',
+        'Run npm install (or the project\'s install-all) first if there is no node_modules',
+        'Give required env vars safe local defaults; the sandbox scrubs secrets, so a database-backed app may not start without configuration',
+      ],
     }));
   }
 

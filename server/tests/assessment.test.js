@@ -123,6 +123,20 @@ describe('runAssessment (stubbed pipeline)', () => {
     expect(done.state).toBe(ASSESS_STATE.COMPLETE);
   });
 
+  it('degrades to static-only when the app start times out, still reaching COMPLETE', async () => {
+    const project = await Project.create({ userId, name: 'Mono', workspaceRoot: VULN });
+    const created = await createAssessment({ userId, projectId: project._id, schedule: false });
+    const deps = { ...stubDeps(), ensureApp: async () => { throw new Error('Timed out waiting for the app on port 58420'); } };
+    const done = await runAssessment({ assessmentId: created._id, deps });
+    // The whole run does NOT fail: the static scan and report still run.
+    expect(done.state).toBe(ASSESS_STATE.COMPLETE);
+    expect(done.baseUrl).toBeNull();
+    expect(done.endpoints.every((e) => e.status === 'skipped')).toBe(true);
+    expect(done.security.notes.some((n) => /could not be started/i.test(n))).toBe(true);
+    // The report explains why the app did not start, as a recommendation.
+    expect(done.report.recommendations.some((r) => /could not be started/i.test(r.title))).toBe(true);
+  });
+
   it('records a failure with the phase, keeping partial state', async () => {
     const project = await Project.create({ userId, name: 'Vuln', workspaceRoot: VULN });
     const created = await createAssessment({ userId, projectId: project._id, schedule: false });

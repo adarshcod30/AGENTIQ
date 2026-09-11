@@ -117,10 +117,23 @@ async function phaseDiscover(assessment, project, ctx, deps) {
 async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
 
-  const app = await deps.ensureApp({
-    runTool: ctx.runTool, context: ctx.context, scripts: model.scripts,
-    userId: String(assessment.userId), sessionId: ctx.sessionId,
-  });
+  // A project that will not start in a scrubbed sandbox (a monorepo dev script,
+  // a hardcoded port, a database dependency, uninstalled root packages) must not
+  // fail the whole assessment. If the app cannot be started, record why, skip the
+  // live tests, and let the static security scan, the readiness verdict and the
+  // recommendations still run. The guidance engine explains the failure and how
+  // to make the project assessable.
+  let app;
+  try {
+    app = await deps.ensureApp({
+      runTool: ctx.runTool, context: ctx.context, scripts: model.scripts,
+      userId: String(assessment.userId), sessionId: ctx.sessionId,
+    });
+  } catch (err) {
+    logger.warn({ assessmentId: String(assessment._id), err: err.message },
+      'app did not start; continuing with static analysis only');
+    app = { baseUrl: null, note: `The app could not be started, so endpoints were not tested live: ${err.message}` };
+  }
   assessment.baseUrl = app.baseUrl;
   if (app.note) assessment.security.notes.push(app.note);
   await assessment.save();
