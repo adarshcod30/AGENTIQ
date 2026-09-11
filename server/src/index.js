@@ -59,6 +59,12 @@ try {
   process.exit(1);
 }
 
+// Restore permission grants that outlived a restart, and start writing new ones
+// through to the database. Boot-only: tests drive the store purely in memory.
+const { grantStore } = await import('./mcp/permissions.js');
+const { attachGrantPersistence } = await import('./mcp/grantPersistence.js');
+await attachGrantPersistence(grantStore);
+
 const server = app.listen(env.PORT, () => {
   logger.info(`AGENTIQ server listening on http://localhost:${env.PORT}`);
   logger.info(`Health check: http://localhost:${env.PORT}/api/health`);

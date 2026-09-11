@@ -93,15 +93,51 @@ const normaliseHost = (host) => String(host ?? '').trim().toLowerCase() || null;
 /**
  * Session-scoped grants.
  *
- * In memory by design: a grant must not outlive the session that gave it.
- * Persisting them would mean a user who once approved probe traffic to a host
- * silently keeps that approval forever, which is precisely the "unaccountable
- * automation" problem in docs/01_PRD.md §2.
+ * The in-memory Map is the source of truth, so `check()` stays synchronous and
+ * the guard chain never awaits a database. A grant still must not outlive the
+ * session that gave it, and the TTL below is what enforces that: every grant
+ * expires an hour after it was made, whatever else happens.
+ *
+ * Optional write-through persistence (mcp/grantPersistence.js, wired at boot)
+ * lets a grant survive a server restart inside that hour, so a long assessment
+ * is not silently de-authorised by a nodemon reload. It does NOT let an approval
+ * live "forever": the persisted record carries the same `expiresAt`, and a TTL
+ * index deletes it on the same clock. When no persistence is attached (the
+ * default, and every test), the hooks are no-ops and the store is pure memory.
  */
 export class GrantStore {
-  constructor({ ttlMs = 60 * 60 * 1000 } = {}) {
+  constructor({ ttlMs = 60 * 60 * 1000, hooks = {} } = {}) {
     this.ttlMs = ttlMs;
     this.grants = new Map();
+    this.hooks = hooks;
+  }
+
+  /** Attach write-through persistence. Called once at boot; never in tests. */
+  setHooks(hooks) {
+    this.hooks = { ...this.hooks, ...hooks };
+  }
+
+  /**
+   * Load persisted grants straight into memory on boot. Bypasses the hooks (this
+   * is a read from the store, not a new decision) and drops anything already
+   * expired, so a restart never resurrects a grant that should be gone.
+   */
+  hydrate(entries = []) {
+    const now = Date.now();
+    let loaded = 0;
+    for (const e of entries) {
+      const expiresAt = Number(e.expiresAt);
+      if (!(expiresAt > now)) continue;
+      this.#bucket(e.userId, e.sessionId).push({
+        riskClass: e.riskClass,
+        host: normaliseHost(e.host),
+        confirmed: Boolean(e.confirmed),
+        grantedAt: Number(e.grantedAt) || now,
+        expiresAt,
+      });
+      loaded += 1;
+    }
+    return loaded;
   }
 
   #bucket(userId, sessionId) {
@@ -131,6 +167,7 @@ export class GrantStore {
       expiresAt: now + this.ttlMs,
     };
     this.#bucket(userId, sessionId).push(entry);
+    this.hooks.onGrant?.({ userId, sessionId, entry });
     return entry;
   }
 
@@ -144,7 +181,9 @@ export class GrantStore {
         (g) => !(g.riskClass === riskClass && (h === null || g.host === h)),
       ),
     );
-    return before - (this.grants.get(k)?.length ?? 0);
+    const removed = before - (this.grants.get(k)?.length ?? 0);
+    if (removed > 0) this.hooks.onRevoke?.({ userId, sessionId, riskClass, host: h });
+    return removed;
   }
 
   list({ userId, sessionId, now = Date.now() }) {
@@ -204,6 +243,7 @@ export class GrantStore {
 
   clear() {
     this.grants.clear();
+    this.hooks.onClear?.();
   }
 }
 
