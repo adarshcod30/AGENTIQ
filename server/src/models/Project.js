@@ -21,6 +21,15 @@ const projectSchema = new mongoose.Schema({
 
   /** When discovery last ran, for the project list. Null until first discovery. */
   lastDiscoveryAt: { type: Date, default: null },
+
+  /**
+   * Opt-in runtime environment for starting the app under test (a database URL,
+   * a secret). Local mode only: it is the user's own app on their own machine.
+   * `select: false` keeps it out of every query by default, including the .lean()
+   * reads the API returns, so it is never sent to the browser. The assessment
+   * worker asks for it explicitly. The names of the keys are all the UI ever sees.
+   */
+  runtimeEnv: { type: Map, of: String, default: undefined, select: false },
 }, { timestamps: true });
 
 projectSchema.index({ userId: 1, createdAt: -1 });

@@ -63,6 +63,24 @@ describe('POST /api/projects', () => {
     const res = await request(app).post('/api/projects').send({ name: 'x', workspaceRoot: VULN });
     expect(res.status).toBe(401);
   });
+
+  it('stores opt-in runtime env, exposes only key names, and never returns values', async () => {
+    const create = await request(app).post('/api/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'With env', workspaceRoot: VULN, runtimeEnv: { MONGO_URI: 'mongodb://secret-value/db', PORT: '3000' } });
+    expect(create.status).toBe(201);
+
+    const list = await request(app).get('/api/projects').set('Authorization', `Bearer ${token}`);
+    const p = list.body.data.projects.find((x) => x.name === 'With env');
+    expect(p.runtimeEnvKeys.sort()).toEqual(['MONGO_URI', 'PORT']);
+    expect(JSON.stringify(list.body)).not.toContain('secret-value'); // values never leave the server
+
+    const patch = await request(app).patch(`/api/projects/${p.id}/env`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ runtimeEnv: { DATABASE_URL: 'x' } });
+    expect(patch.status).toBe(200);
+    expect(patch.body.data.runtimeEnvKeys).toEqual(['DATABASE_URL']);
+  });
 });
 
 describe('POST /api/projects/:id/discover', () => {

@@ -32,7 +32,7 @@ export class DiscoveryError extends Error {
  * its canonical realpath, which is what we store, so later tool calls are bound
  * to a root that cannot move under a symlink.
  */
-export async function createProject({ userId, name, workspaceRoot }) {
+export async function createProject({ userId, name, workspaceRoot, runtimeEnv }) {
   let jail;
   try {
     jail = createJail(workspaceRoot);
@@ -42,7 +42,22 @@ export async function createProject({ userId, name, workspaceRoot }) {
     }
     throw err;
   }
-  return Project.create({ userId, name, workspaceRoot: jail.root });
+  const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
+  return Project.create({ userId, name, workspaceRoot: jail.root, ...(hasEnv ? { runtimeEnv } : {}) });
+}
+
+/**
+ * Replaces a project's opt-in runtime environment. Owner-scoped. Returns the key
+ * NAMES only, never the values, so a caller can confirm what is set without the
+ * secrets travelling back out.
+ */
+export async function updateProjectEnv({ userId, projectId, runtimeEnv }) {
+  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
+  if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
+  const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
+  project.runtimeEnv = hasEnv ? runtimeEnv : undefined;
+  await project.save();
+  return { id: project._id, runtimeEnvKeys: hasEnv ? Object.keys(runtimeEnv) : [] };
 }
 
 /** The tool runner, carrying the project workspace so fs tools stay in the jail. */
@@ -92,15 +107,21 @@ export async function discoverProject({ userId, projectId, sessionId = 'discover
 
 /** A user's projects, newest first. Scoped by userId, never by id alone. */
 export async function listProjects({ userId }) {
-  return Project.find({ userId }).sort({ createdAt: -1 }).lean();
+  const projects = await Project.find({ userId }).sort({ createdAt: -1 }).select('+runtimeEnv').lean();
+  // Expose only the KEY names of the runtime env, never the values.
+  return projects.map(({ runtimeEnv, ...p }) => ({
+    ...p,
+    runtimeEnvKeys: runtimeEnv ? Object.keys(runtimeEnv) : [],
+  }));
 }
 
 /** One project with its latest discovery, scoped to the owner. */
 export async function getProject({ userId, projectId }) {
-  const project = await Project.findOne({ _id: projectId, userId });
+  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
   if (!project) return null;
   const latest = await Discovery.findOne({ projectId, userId }).sort({ createdAt: -1 }).lean();
-  return { project: project.toJSON(), discovery: latest };
+  const runtimeEnvKeys = project.runtimeEnv ? [...project.runtimeEnv.keys()] : [];
+  return { project: { ...project.toJSON(), runtimeEnvKeys }, discovery: latest };
 }
 
-export default { createProject, discoverProject, listProjects, getProject };
+export default { createProject, updateProjectEnv, discoverProject, listProjects, getProject };

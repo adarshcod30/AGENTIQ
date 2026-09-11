@@ -40,6 +40,12 @@ export const inputSchema = z.object({
   /** Fixed port for an app that ignores PORT; otherwise a free port is chosen. */
   port: z.number().int().positive().max(65535).optional(),
   readyTimeoutMs: z.number().int().positive().max(120000).default(20000),
+  /**
+   * Opt-in runtime environment for the app under test (the user's own database
+   * URL, secrets). Layered under the sandbox's controlled vars, so it cannot
+   * override PORT/PATH/HOME/NODE_ENV. Never carries AGENTIQ's own secrets.
+   */
+  env: z.record(z.string(), z.string()).optional(),
 });
 
 export const outputSchema = z.object({
@@ -83,7 +89,7 @@ async function start(input, jail) {
 
   const port = input.port ?? await pickFreePort();
   const args = buildArgs(input, jail);
-  const child = spawnSandboxed({ runner: input.runner, args, cwd: root, port });
+  const child = spawnSandboxed({ runner: input.runner, args, cwd: root, port, env: input.env });
 
   let stderr = '';
   let stdout = '';

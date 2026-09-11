@@ -68,6 +68,17 @@ describe('process sandbox', () => {
     expect(Object.keys(env).sort()).toEqual(['HOME', 'NODE_ENV', 'NODE_OPTIONS', 'PATH', 'PORT']);
   });
 
+  it('layers opt-in extraEnv UNDER the controlled vars', () => {
+    const env = childEnv(3000, { extraEnv: { MONGO_URI: 'mongodb://db/app', PORT: '9999', PATH: '/evil', NODE_ENV: 'production' } });
+    // The user's own app var is passed through.
+    expect(env.MONGO_URI).toBe('mongodb://db/app');
+    // But the controlled vars win: the app cannot decide where it listens, and
+    // cannot repoint PATH or force production.
+    expect(env.PORT).toBe('3000');
+    expect(env.PATH).not.toBe('/evil');
+    expect(env.NODE_ENV).toBe('development');
+  });
+
   it('exposes a resource ceiling with a heap cap and a lifetime backstop', () => {
     expect(DEFAULT_LIMITS.maxOldSpaceMb).toBeGreaterThan(0);
     expect(DEFAULT_LIMITS.maxLifetimeMs).toBeGreaterThan(0);

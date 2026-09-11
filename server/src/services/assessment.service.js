@@ -91,11 +91,14 @@ export function defaultDeps() {
  * so the testing tools may reach it: the user consented to the assessment, and
  * the target is the app the platform itself just started on loopback.
  */
-async function defaultEnsureApp({ runTool, context, scripts, userId, sessionId }) {
+async function defaultEnsureApp({ runTool, context, scripts, userId, sessionId, runtimeEnv = null }) {
   const script = ['dev', 'start', 'serve'].find((s) => scripts?.[s]);
   if (!script) return { baseUrl: null, note: 'No dev/start/serve script; the app was not started.' };
   const status = await runTool('app_lifecycle', { action: 'status' }, context);
-  const started = status.running ? status : await runTool('app_lifecycle', { action: 'start', runner: 'npm', script }, context);
+  const started = status.running
+    ? status
+    : await runTool('app_lifecycle',
+      { action: 'start', runner: 'npm', script, ...(runtimeEnv ? { env: runtimeEnv } : {}) }, context);
   const host = new URL(started.baseUrl).host;
   grantStore.grant({ userId, sessionId, riskClass: RISK_CLASS.NETWORK_READ, host });
   return { baseUrl: started.baseUrl, note: null };
@@ -114,7 +117,7 @@ async function phaseDiscover(assessment, project, ctx, deps) {
   return { model, discovery };
 }
 
-async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification }) {
+async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
 
   // A project that will not start in a scrubbed sandbox (a monorepo dev script,
@@ -127,7 +130,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification })
   try {
     app = await deps.ensureApp({
       runTool: ctx.runTool, context: ctx.context, scripts: model.scripts,
-      userId: String(assessment.userId), sessionId: ctx.sessionId,
+      userId: String(assessment.userId), sessionId: ctx.sessionId, runtimeEnv,
     });
   } catch (err) {
     logger.warn({ assessmentId: String(assessment._id), err: err.message },
@@ -237,8 +240,11 @@ async function finishFailed(assessment, err) {
 export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseOnClarification = false } = {}) {
   const assessment = await Assessment.findById(assessmentId);
   if (!assessment) return null;
-  const project = await Project.findById(assessment.projectId);
+  // Ask for runtimeEnv explicitly (it is select:false). This is the only place it
+  // is read, and it goes straight to the app-start, never into a response.
+  const project = await Project.findById(assessment.projectId).select('+runtimeEnv');
   if (!project) return finishFailed(assessment, new AssessmentError('Project gone', 'PROJECT_GONE', 409));
+  const runtimeEnv = project.runtimeEnv ? Object.fromEntries(project.runtimeEnv) : null;
 
   let jail;
   try {
@@ -258,7 +264,7 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
       ({ model } = await phaseDiscover(assessment, project, ctx, deps));
     }
     if (before(assessment.state, S.SCANNING)) {
-      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification });
+      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv });
       if (paused) return assessment; // waits for an answer
     }
     if (before(assessment.state, S.ANALYZING)) await phaseScan(assessment, model, ctx, deps);

@@ -58,9 +58,16 @@ export class ProcessError extends Error {
  * A minimal environment for the child: never the platform's own secrets.
  * A heap cap is added only when asked for, so `childEnv(port)` on its own stays
  * the exact four-key scrubbed environment the sandbox has always produced.
+ *
+ * `extraEnv` is the opt-in runtime environment a user supplies for THEIR OWN app
+ * (a database URL, a JWT secret) so a real app can start. It is layered UNDER the
+ * controlled variables: the user can add what their app needs, but cannot
+ * override PORT, PATH, HOME or NODE_ENV, so AGENTIQ still decides where the app
+ * listens. It never carries AGENTIQ's own secrets: only what the user passed in.
  */
-export function childEnv(port, { maxOldSpaceMb } = {}) {
+export function childEnv(port, { maxOldSpaceMb, extraEnv } = {}) {
   const env = {
+    ...(extraEnv && typeof extraEnv === 'object' ? extraEnv : {}),
     PATH: process.env.PATH ?? '',
     HOME: process.env.HOME ?? '',
     PORT: String(port),
@@ -94,7 +101,7 @@ export function pickFreePort() {
  * `limits.maxLifetimeMs`; the timer is unref'd and cleared on exit, so it never
  * keeps the parent alive and never fires for a child that stops on its own.
  */
-export function spawnSandboxed({ runner, args, cwd, port, limits = {} }) {
+export function spawnSandboxed({ runner, args, cwd, port, limits = {}, env: extraEnv }) {
   if (!RUNNERS.has(runner)) {
     throw new ProcessError(`Runner not allowed: ${runner}`, 'RUNNER_NOT_ALLOWED');
   }
@@ -104,7 +111,7 @@ export function spawnSandboxed({ runner, args, cwd, port, limits = {} }) {
   const l = { ...DEFAULT_LIMITS, ...limits };
   const child = spawn(runner, args, {
     cwd,
-    env: childEnv(port, { maxOldSpaceMb: l.maxOldSpaceMb }),
+    env: childEnv(port, { maxOldSpaceMb: l.maxOldSpaceMb, extraEnv }),
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,

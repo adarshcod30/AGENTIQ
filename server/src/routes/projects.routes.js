@@ -10,14 +10,18 @@ import { z } from 'zod';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 import {
-  createProject, discoverProject, listProjects, getProject, DiscoveryError,
+  createProject, updateProjectEnv, discoverProject, listProjects, getProject, DiscoveryError,
 } from '../services/discovery.service.js';
 
 const router = Router();
 
+/** Opt-in runtime env for the app under test: a map of KEY -> value, local only. */
+const runtimeEnvSchema = z.record(z.string(), z.string()).optional();
+
 const createSchema = z.object({
   name: z.string().trim().min(1, { error: 'A project name is required' }).max(120),
   workspaceRoot: z.string().min(1, { error: 'The path to the project folder is required' }),
+  runtimeEnv: runtimeEnvSchema,
 });
 
 /** Maps a DiscoveryError to its HTTP status; anything else is a real 500. */
@@ -45,6 +49,22 @@ router.post('/', protectRoute, async (req, res) => {
 router.get('/', protectRoute, async (req, res) => {
   const projects = await listProjects({ userId: req.user._id });
   return ok(res, { projects: projects.map((p) => ({ id: p._id, ...p })) });
+});
+
+/** Set (or clear) the opt-in runtime env for the app under test. Owner-scoped. */
+router.patch('/:id/env', protectRoute, async (req, res) => {
+  const parsed = z.object({ runtimeEnv: runtimeEnvSchema }).safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Provide runtimeEnv as a map of string keys to string values');
+  }
+  try {
+    const result = await updateProjectEnv({
+      userId: req.user._id, projectId: req.params.id, runtimeEnv: parsed.data.runtimeEnv ?? {},
+    });
+    return ok(res, result);
+  } catch (err) {
+    return sendError(res, err);
+  }
 });
 
 router.get('/:id', protectRoute, async (req, res) => {
