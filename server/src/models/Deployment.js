@@ -43,8 +43,15 @@ const deploymentSchema = new mongoose.Schema({
   deployId: { type: String, default: null },
   liveUrl: { type: String, default: null },
 
-  /** Failure diagnosis (deploy/diagnose.js): classification, explanation, a proposed fix. */
+  /**
+   * Failure diagnosis (deploy/diagnose.js): classification, explanation, a
+   * proposed fix, and a `proposal` (deploy/retry.js) saying whether AGENTIQ can
+   * retry this by setting config, or whether the user must change code first.
+   */
   diagnosis: { type: mongoose.Schema.Types.Mixed, default: null },
+
+  /** When this deployment is a retry, the deployment it was retrying. */
+  retryOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Deployment', default: null },
 
   /**
    * The whole point of F5: the runs executed against the LIVE url after the

@@ -7,10 +7,11 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { connectTestDb, disconnectTestDb } from './helpers/mongo.js';
 import { detectRequirements } from '../src/deploy/requirements.js';
 import { diagnoseFailure } from '../src/deploy/diagnose.js';
+import { proposeRetry } from '../src/deploy/retry.js';
 import { getProvider, listProviders, PROVIDER_NAMES } from '../src/deploy/index.js';
-import { startDeployment } from '../src/services/deployment.service.js';
+import { startDeployment, retryDeployment } from '../src/services/deployment.service.js';
 import { User } from '../src/models/User.js';
-import { Deployment } from '../src/models/Deployment.js';
+import { Deployment, DEPLOY_STATE } from '../src/models/Deployment.js';
 
 describe('detectRequirements', () => {
   it('reads build and start commands from package.json', () => {
@@ -51,6 +52,36 @@ describe('diagnoseFailure', () => {
     const d = diagnoseFailure('no open ports detected');
     expect(d.safeFix.behaviourChanging).toBe(true);
     expect(d.suggestion).toMatch(/process\.env\.PORT/);
+  });
+});
+
+describe('proposeRetry', () => {
+  it('offers a config-only retry for a missing environment variable', () => {
+    const p = proposeRetry(diagnoseFailure('process.env.API_KEY is undefined'));
+    expect(p.kind).toBe('set-env');
+    expect(p.retryable).toBe(true);
+    expect(p.requiredEnvVars).toContain('API_KEY');
+    expect(p.requiresApproval).toBe(true);
+  });
+
+  it('falls back to the declared env keys when the logs name none', () => {
+    const diag = { safeFix: { type: 'env-var', key: null }, suggestion: 'set it' };
+    const p = proposeRetry(diag, { envVars: ['DATABASE_URL', 'SESSION_SECRET'] });
+    expect(p.kind).toBe('set-env');
+    expect(p.requiredEnvVars).toEqual(['DATABASE_URL', 'SESSION_SECRET']);
+  });
+
+  it('refuses to auto-apply a code change (a hardcoded port)', () => {
+    const p = proposeRetry(diagnoseFailure('no open ports detected'));
+    expect(p.kind).toBe('code-change');
+    expect(p.retryable).toBe(false);
+    expect(p.message).toMatch(/process\.env\.PORT/);
+  });
+
+  it('offers nothing to retry when there is no safe fix', () => {
+    const p = proposeRetry(diagnoseFailure('something totally unrecognised'));
+    expect(p.kind).toBe('none');
+    expect(p.retryable).toBe(false);
   });
 });
 
@@ -102,5 +133,68 @@ describe('dispatch through the second provider (the seam)', () => {
       input: { provider: 'nope', repo: 'https://github.com/acme/app', serviceName: 'app' },
       runTool: async () => ({}),
     })).rejects.toThrow(/Unknown deployment provider/);
+  });
+});
+
+describe('approval-gated retry', () => {
+  beforeAll(async () => { await connectTestDb(); });
+  afterAll(async () => { await disconnectTestDb(); });
+  beforeEach(async () => { await Promise.all([User.deleteMany({}), Deployment.deleteMany({})]); });
+
+  async function user(email = 'r@example.com') {
+    return User.create({ email, displayName: 'R', authProviders: [{ provider: 'local', providerId: email, email }] });
+  }
+
+  /** A failed deployment carrying the given retry proposal. */
+  async function failedWith(userId, proposal) {
+    return Deployment.create({
+      userId, provider: 'railway', repo: 'https://github.com/acme/app', branch: 'main',
+      serviceName: 'app', state: DEPLOY_STATE.DEPLOY_FAILED,
+      diagnosis: { classification: 'x', explanation: '', suggestion: 's', safeFix: null, proposal },
+    });
+  }
+
+  it('refuses a retry that was not approved', async () => {
+    const u = await user();
+    const dep = await failedWith(u._id, { kind: 'set-env', retryable: true, requiredEnvVars: ['API_KEY'] });
+    await expect(retryDeployment({ userId: u._id, deploymentId: dep._id, approved: false }))
+      .rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
+  });
+
+  it('refuses to retry a deployment that did not fail', async () => {
+    const u = await user();
+    const dep = await Deployment.create({
+      userId: u._id, provider: 'railway', repo: 'https://github.com/acme/app', serviceName: 'app',
+      state: DEPLOY_STATE.COMPLETE,
+    });
+    await expect(retryDeployment({ userId: u._id, deploymentId: dep._id, approved: true }))
+      .rejects.toMatchObject({ code: 'NOT_RETRYABLE' });
+  });
+
+  it('refuses to auto-apply a code-change fix, even when approved', async () => {
+    const u = await user();
+    const dep = await failedWith(u._id, { kind: 'code-change', retryable: false, message: 'Bind to process.env.PORT.' });
+    await expect(retryDeployment({ userId: u._id, deploymentId: dep._id, approved: true }))
+      .rejects.toMatchObject({ code: 'CODE_CHANGE_REQUIRED' });
+  });
+
+  it('retries a config fix: a new deployment linked to the original', async () => {
+    const u = await user();
+    const prev = await failedWith(u._id, { kind: 'set-env', retryable: true, requiredEnvVars: ['API_KEY'] });
+    const next = await retryDeployment({
+      userId: u._id, deploymentId: prev._id, approved: true,
+      envVars: { API_KEY: 'supplied-by-the-user' }, runTool: async () => ({}),
+    });
+    expect(String(next.retryOf)).toBe(String(prev._id));
+    expect(next.provider).toBe('railway');
+    expect(String(next._id)).not.toBe(String(prev._id));
+  });
+
+  it('is scoped to the owner: another user cannot retry it', async () => {
+    const owner = await user('owner@example.com');
+    const other = await user('other@example.com');
+    const dep = await failedWith(owner._id, { kind: 'set-env', retryable: true, requiredEnvVars: [] });
+    await expect(retryDeployment({ userId: other._id, deploymentId: dep._id, approved: true }))
+      .rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

@@ -19,6 +19,7 @@ import { Deployment, DEPLOY_STATE } from '../models/Deployment.js';
 import { CHECK } from '../agents/deployment.agent.js';
 import { getProvider, PROVIDER_NAMES } from '../deploy/index.js';
 import { detectRequirements } from '../deploy/requirements.js';
+import { proposeRetry } from '../deploy/retry.js';
 import { runSecurityAgent } from '../agents/security.agent.js';
 import { startRun } from './run.service.js';
 import { getTool } from '../mcp/registry.js';
@@ -26,8 +27,28 @@ import { grantStore, RISK_CLASS } from '../mcp/permissions.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
+export class DeploymentError extends Error {
+  constructor(message, code = 'DEPLOYMENT_ERROR', status = 400) {
+    super(message);
+    this.name = 'DeploymentError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 /** Hosts preflight must be allowed to read before the flow can start. */
 export const PREFLIGHT_HOSTS = ['api.github.com'];
+
+/**
+ * Diagnose a failure and attach the retry proposal, so the record carries both
+ * "what went wrong" and "what, if anything, the platform can do about it".
+ */
+function diagnose(provider, logs) {
+  const requirements = detectRequirements(null);
+  const diagnosis = provider.diagnoseFailure?.(logs, requirements) ?? null;
+  if (!diagnosis) return null;
+  return { ...diagnosis, proposal: proposeRetry(diagnosis, requirements) };
+}
 
 /**
  * Families the post-deploy scan may run without asking again.
@@ -110,6 +131,8 @@ export async function startDeployment({
   // without a live LLM provider on CI.
   llm,
   verify = true,
+  // Set when this deployment is a retry of an earlier one.
+  retryOf = null,
 }) {
   const providerName = input.provider ?? 'render';
   const provider = getProvider(providerName);
@@ -123,6 +146,7 @@ export async function startDeployment({
     repo: input.repo,
     branch: input.branch ?? 'main',
     serviceName: input.serviceName,
+    retryOf,
     state: DEPLOY_STATE.PREFLIGHT,
     stateHistory: [{ state: DEPLOY_STATE.PREFLIGHT, at: new Date() }],
     startedAt: new Date(),
@@ -166,7 +190,7 @@ export async function startDeployment({
     });
   } catch (err) {
     logger.warn({ deploymentId: String(dep._id), err: err.message }, 'deployment failed');
-    dep.diagnosis = provider.diagnoseFailure?.(err.message, detectRequirements(null)) ?? null;
+    dep.diagnosis = diagnose(provider, err.message);
     return finish(dep, DEPLOY_STATE.DEPLOY_FAILED, err);
   }
 
@@ -194,7 +218,7 @@ export async function startDeployment({
 
   if (!result.ok) {
     const logs = result.error ?? result.logs ?? `Deploy ended in state "${result.deployStatus}".`;
-    dep.diagnosis = provider.diagnoseFailure?.(logs, detectRequirements(null)) ?? null;
+    dep.diagnosis = diagnose(provider, logs);
     return finish(dep, DEPLOY_STATE.DEPLOY_FAILED, Object.assign(
       new Error(result.error ?? `Deploy ended in state "${result.deployStatus}".`),
       { code: 'DEPLOY_FAILED' },
@@ -270,6 +294,54 @@ export async function startDeployment({
   return finish(dep, DEPLOY_STATE.COMPLETE);
 }
 
+/**
+ * Retries a failed deployment after the user has approved it and supplied any
+ * configuration the fix needs.
+ *
+ * The gate is deliberately narrow. A retry is allowed only when the failure's
+ * proposal is a CONFIG change (a missing environment variable): AGENTIQ sets the
+ * value the user provides and redeploys, and never edits the repository. A
+ * code-change proposal (a missing start script, a hardcoded port) is refused
+ * here on purpose, with the suggestion returned, so the human applies the fix
+ * and redeploys themselves. That is the "propose, never auto-apply" rule from
+ * the plan, enforced rather than merely described.
+ */
+export async function retryDeployment({
+  userId, sessionId = 'default', deploymentId, approved = false, envVars = {}, ...seams
+}) {
+  const prev = await Deployment.findOne({ _id: deploymentId, userId });
+  if (!prev) throw new DeploymentError('No such deployment.', 'NOT_FOUND', 404);
+  if (prev.state !== DEPLOY_STATE.DEPLOY_FAILED) {
+    throw new DeploymentError(
+      `Only a failed deployment can be retried; this one is ${prev.state}.`,
+      'NOT_RETRYABLE', 409,
+    );
+  }
+  if (!approved) {
+    throw new DeploymentError('A retry must be explicitly approved.', 'APPROVAL_REQUIRED', 400);
+  }
+
+  const proposal = prev.diagnosis?.proposal ?? null;
+  if (proposal && proposal.kind === 'code-change') {
+    throw new DeploymentError(
+      `This failure needs a code change, so it cannot be retried automatically. ${proposal.message}`,
+      'CODE_CHANGE_REQUIRED', 409,
+    );
+  }
+
+  // Redeploy the same target, adding the configuration the user supplied. The
+  // deploy.write and network.read grants are re-checked by the tool layer on the
+  // new run exactly as on the first, so approving a retry does not bypass them.
+  const input = {
+    provider: prev.provider,
+    repo: prev.repo,
+    branch: prev.branch,
+    serviceName: prev.serviceName,
+    envVars: { ...envVars },
+  };
+  return startDeployment({ userId, sessionId, input, retryOf: prev._id, ...seams });
+}
+
 /** History for one user. Scoped by userId, never by id alone. */
 export async function listDeployments({ userId, limit = 50, skip = 0 }) {
   const [deployments, total] = await Promise.all([
@@ -287,4 +359,4 @@ export async function getDeployment({ userId, deploymentId }) {
 /** True when the deployment agent is usable at all. */
 export const isConfigured = () => Boolean(env.RENDER_API_KEY);
 
-export default { startDeployment, preflightOnly, listDeployments, getDeployment, missingGrants };
+export default { startDeployment, retryDeployment, preflightOnly, listDeployments, getDeployment, missingGrants };

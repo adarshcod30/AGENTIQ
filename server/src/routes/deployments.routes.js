@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
-  startDeployment, preflightOnly, listDeployments, getDeployment,
+  startDeployment, retryDeployment, preflightOnly, listDeployments, getDeployment,
   missingGrants, isConfigured,
   AUTO_VERIFY_FAMILIES, REQUIRES_APPROVAL_FAMILIES, PREFLIGHT_HOSTS,
 } from '../services/deployment.service.js';
@@ -110,6 +110,46 @@ router.get('/:id', protectRoute, async (req, res) => {
   const deployment = await getDeployment({ userId: req.user._id, deploymentId: req.params.id });
   if (!deployment) return fail(res, 404, 'NOT_FOUND', 'No such deployment.');
   return ok(res, { deployment });
+});
+
+const retrySchema = z.object({
+  approved: z.boolean().default(false),
+  envVars: z.record(z.string(), z.string()).default({}),
+});
+
+/**
+ * Retry a failed deployment. Approval-gated, and config-only: the service
+ * refuses a retry whose fix would need a code change. The deploy grants are
+ * re-checked here exactly as for a first deployment, so an approved retry never
+ * skips the permission sheet.
+ */
+router.post('/:id/retry', protectRoute, async (req, res) => {
+  const parsed = retrySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Check the highlighted fields',
+      parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })));
+  }
+
+  const sessionId = sessionOf(req);
+  const missing = missingGrants({ userId: req.user._id, sessionId });
+  if (missing.length) {
+    return fail(res, 403, 'PERMISSION_DENIED',
+      'This retry needs permissions that have not been granted for this session.',
+      { needsGrant: missing });
+  }
+
+  try {
+    const deployment = await retryDeployment({
+      userId: req.user._id, sessionId, deploymentId: req.params.id,
+      approved: parsed.data.approved, envVars: parsed.data.envVars,
+    });
+    return ok(res, { deployment }, 201);
+  } catch (err) {
+    if (err.name === 'DeploymentError') {
+      return fail(res, err.status ?? 400, err.code, err.message);
+    }
+    throw err;
+  }
 });
 
 router.get('/providers', protectRoute, (req, res) => ok(res, { providers: listProviders() }));
