@@ -354,7 +354,8 @@ Phases 1 to 5 deliver the autonomous local workflow. 6 and 7 make it a product.
 ## I. Feasibility
 
 **Fully feasible, locally, now.**
-- AST route discovery for Express and similar (libs are installed).
+- Route discovery for Express (AST), FastAPI and Flask (patterns), and Next.js (filesystem
+  convention). A project that is several at once is discovered by all of them and merged.
 - The filesystem jail and process sandbox (same pattern as the egress guard).
 - `dep_audit` over `npm audit`, `secret_scan`, `config_scan`, pattern-based `sast_scan`.
 - `app_lifecycle` for Node projects on loopback.
@@ -362,10 +363,10 @@ Phases 1 to 5 deliver the autonomous local workflow. 6 and 7 make it a product.
 - Grounded, per-endpoint test generation.
 
 **Feasible with limits.**
-- Route discovery across *every* framework. Each framework (Express, Fastify, NestJS, Flask,
-  FastAPI, Spring) needs its own extractor. Ship Express first; add per framework. Frameworks with
-  heavy runtime magic (decorator routing, dynamic mounts) may need a running-app probe as a
-  fallback.
+- Route discovery across *every* framework. Express, FastAPI, Flask and Next.js ship today; Fastify,
+  NestJS, Spring and others still need their own extractor. Cross-package prefix composition in
+  Python is a known gap (the within-file and router-level prefixes are composed). Frameworks with
+  heavy runtime magic (decorator routing, dynamic mounts) may need a running-app probe as a fallback.
 - Deep SAST. A real Semgrep ruleset beats hand-written patterns; make Semgrep an optional tool used
   when installed, with a lighter built-in fallback so the system runs without it.
 - Intent inference. The LLM's guess about what an endpoint should do is a hypothesis, not ground
