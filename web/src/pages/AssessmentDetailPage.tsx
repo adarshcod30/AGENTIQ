@@ -280,15 +280,30 @@ export function AssessmentDetailPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
-              <span className="t-small text-ink-muted">
-                {a.readiness.ready
-                  ? 'This project passed the readiness checks.'
-                  : 'Resolve the blockers above before deploying.'}
-              </span>
-              <Link to="/deploy"
-                className="t-small inline-flex items-center gap-1.5 rounded-[6px] bg-primary px-3 py-1.5 font-medium text-white hover:opacity-90">
-                <UploadCloud size={15} aria-hidden /> Deploy this project
-              </Link>
+              {a.readiness.ready ? (
+                <>
+                  <span className="t-small font-medium text-success">
+                    Passed the readiness checks{a.readiness.warnings.length > 0 ? `, with ${a.readiness.warnings.length} warning(s)` : ''}. Ready to deploy.
+                  </span>
+                  <Link to="/deploy"
+                    className="t-small inline-flex items-center gap-1.5 rounded-[6px] bg-primary px-3 py-1.5 font-medium text-white hover:opacity-90">
+                    <UploadCloud size={15} aria-hidden /> Deploy this project
+                  </Link>
+                  <span className="t-small text-ink-subtle">
+                    You confirm the deploy and grant permission on the next screen.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="t-small text-ink-muted">
+                    Resolve the {a.readiness.blockers.length} blocker(s) above before deploying.
+                  </span>
+                  <span aria-disabled="true" title="Resolve the blockers first"
+                    className="t-small inline-flex cursor-not-allowed items-center gap-1.5 rounded-[6px] bg-surface-3 px-3 py-1.5 font-medium text-ink-subtle opacity-70">
+                    <UploadCloud size={15} aria-hidden /> Deploy this project
+                  </span>
+                </>
+              )}
             </div>
           </CardBody>
         </Card>
