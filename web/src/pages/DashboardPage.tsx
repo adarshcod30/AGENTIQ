@@ -13,12 +13,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { PlayCircle, AlertTriangle } from 'lucide-react';
-import { useStats } from '@/hooks/api';
+import { PlayCircle, AlertTriangle, FolderGit2, ArrowRight } from 'lucide-react';
+import { useStats, useAssessments } from '@/hooks/api';
 import {
   Card, CardHeader, CardBody, KpiCard, Skeleton, EmptyState, Button,
   MethodChip, StatusChip, Chip, Alert,
 } from '@/components/ui';
+import { AssessChip } from './ProjectsPage';
 
 const SEVERITY_COLOR: Record<string, string> = {
   critical: 'var(--color-sev-critical)',
@@ -29,6 +30,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 export function DashboardPage() {
   const { data, isLoading, isError, refetch } = useStats();
+  const { data: assessData } = useAssessments();
 
   if (isLoading) {
     return (
@@ -55,6 +57,7 @@ export function DashboardPage() {
   }
 
   const { totals, findings, totalFindings, pulse, recent, audit } = data;
+  const recentAssessments = assessData?.assessments ?? [];
 
   // A brand-new account gets a call to action, not a zero-filled chart.
   if (totals.totalRuns === 0) {
@@ -147,6 +150,39 @@ export function DashboardPage() {
           </CardBody>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Autonomous assessments"
+          actions={(
+            <Link to="/projects">
+              <Button size="sm" variant="ghost">Projects <ArrowRight size={14} aria-hidden /></Button>
+            </Link>
+          )}
+        />
+        {recentAssessments.length ? (
+          <div className="divide-y divide-line">
+            {recentAssessments.slice(0, 5).map((a) => (
+              <Link key={a._id} to={`/assessments/${a._id}`}
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
+                <AssessChip state={a.state} />
+                <span className="t-small min-w-0 flex-1 truncate text-ink-muted">
+                  {a.endpoints.length} endpoint(s), {a.security.findings.length} finding(s)
+                  {a.state === 'COMPLETE' && (a.readiness.ready ? ', ready to deploy' : ', not ready')}
+                </span>
+                <span className="t-small text-ink-subtle">{new Date(a.startedAt).toLocaleDateString()}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<FolderGit2 size={32} strokeWidth={1.5} />}
+            title="No assessments yet"
+            body="Point AGENTIQ at a project folder and it discovers the routes, runs the app, tests it, scans it, and judges whether it is ready to deploy."
+            action={<Link to="/projects"><Button size="sm">Assess a project</Button></Link>}
+          />
+        )}
+      </Card>
 
       {/* The tool layer, visible on the dashboard itself. */}
       {(audit.denied > 0 || audit.blocked_ssrf > 0) && (
