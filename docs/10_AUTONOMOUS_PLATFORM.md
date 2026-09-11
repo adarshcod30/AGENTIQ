@@ -324,7 +324,8 @@ Shipped: `report.service.js` (readiness verdict + structured report) and the `re
 - Acceptance: a single report shows discovered APIs, test results, findings by severity with
   evidence, recommended fixes, and a readiness verdict.
 
-**Phase 6 · Pluggable deployment.**
+**Phase 6 · Pluggable deployment. DONE (core).**
+Shipped: a `DeploymentProvider` interface and registry (`server/src/deploy/`), Render as the first implementation wrapping the existing tested orchestration, a Railway stub that proves the seam, provider-agnostic requirement detection and failure diagnosis (with behaviour-changing fixes flagged for approval), and provider selection through the routes. Follow-ups: the approval-gated auto-retry-with-fix, and surfacing provider choice in the web UI. Original plan:
 The `DeploymentProvider` interface; Render refactored behind it; failure diagnosis and safe retry.
 Provider choice surfaced in the UI.
 - Acceptance: Render still deploys through the new interface; a second provider stub proves the seam.
