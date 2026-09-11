@@ -1,7 +1,7 @@
 /**
  * Tool Registry: docs/03_App_Flow.md B6.
  *
- * "A table of all nine tools: name, description, risk class chip, and an
+ * "A table of every registered tool: name, description, risk class chip, and an
  * expandable live JSON Schema fetched from /api/mcp/tools. A note at the top:
  * 'Generated from the running server's tool registry. Nothing on this page is
  * hardcoded.'"
@@ -44,7 +44,7 @@ export function ToolRegistryPage() {
     );
   }
 
-  // The registry is never empty in a running server: nine tools are registered
+  // The registry is never empty in a running server: tools are registered
   // at boot, so there is deliberately no empty state here.
   return (
     <div className="space-y-4">

@@ -10,8 +10,8 @@
  *
  * SIX FAMILIES, five of them tools. Rate limiting is orchestrated here from
  * repeated `http_request` calls rather than a tenth tool, because
- * docs/01_PRD.md F1 fixes the registry at nine and every one of those requests
- * is individually audited anyway.
+ * that would be a tenth network tool, and every one of those requests is
+ * individually audited anyway.
  */
 import { SEVERITY } from '../mcp/probes/baseline.js';
 

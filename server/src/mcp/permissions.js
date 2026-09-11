@@ -6,7 +6,7 @@
  * reviewable controls.
  *
  * Grants are per RISK CLASS and per HOST, not per tool (docs/01_PRD.md F1).
- * Asking a user to approve nine tools individually is theatre: they will click
+ * Asking a user to approve every tool individually is theatre: they will click
  * through it. Asking them to approve
  * "this app may send attack-indicator payloads to api.example.com" is a real
  * decision a human can actually make.

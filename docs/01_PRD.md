@@ -130,7 +130,7 @@ schema. Every invocation is permission-checked and written to an audit collectio
   **Audit Log** page showing real invocations. *These two pages are how the claim gets checked.*
 
 > **Design note:** the permission grant is per session and per risk class, not per tool. Asking a
-> user to approve nine tools individually is theatre; asking them to approve "this app may send
+> user to approve every tool individually is theatre; asking them to approve "this app may send
 > probe traffic to hosts you nominate" is a real decision.
 
 ---

@@ -186,7 +186,7 @@ cannot work. **A page that says "not configured" is honest; a page that pretends
 
 ## B6. Tool Registry & Audit: the proof journey
 
-`/tools`: a table of all nine tools: name, description, risk class chip, and an expandable live
+`/tools`: a table of every registered tool: name, description, risk class chip, and an expandable live
 JSON Schema fetched from `/api/mcp/tools`. A note at the top: *"Generated from the running server's
 tool registry. Nothing on this page is hardcoded."*
 

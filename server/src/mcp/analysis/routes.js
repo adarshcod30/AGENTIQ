@@ -181,15 +181,18 @@ export function analyzeSource(code, { filename = 'unknown' } = {}) {
       return;
     }
 
-    // A mount: <app>.use('/prefix', router)
+    // A mount: <app>.use('/prefix', ...middleware, router). The router can sit
+    // behind any number of middleware arguments (app.use('/api/auth',
+    // rateLimit, authRoutes)), so every argument after the prefix is a candidate
+    // target, not just the second one. discover_routes keeps whichever candidate
+    // resolves to a workspace file that actually declares routes.
     if (method === 'use' && first?.type === 'StringLiteral' && n.arguments.length >= 2) {
-      const target = n.arguments[1];
-      mounts.push({
-        prefix: first.value,
-        targetVar: target?.type === 'Identifier' ? target.name : null,
-        targetImport: isRequireOf(target, undefined) ? target.arguments[0]?.value : null,
-        line: n.loc?.start.line ?? null,
-      });
+      const targets = [];
+      for (const arg of n.arguments.slice(1)) {
+        if (arg?.type === 'Identifier') targets.push({ var: arg.name, import: null });
+        else if (isRequireOf(arg, undefined)) targets.push({ var: null, import: arg.arguments?.[0]?.value ?? null });
+      }
+      mounts.push({ prefix: first.value, targets, line: n.loc?.start.line ?? null });
     }
   });
 

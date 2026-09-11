@@ -140,7 +140,7 @@ flowchart LR
         SV["Services<br/>run · spec · deployment · stats"]
         AG["Agents<br/>testing · security · deployment<br/>no I/O allowed"]
         subgraph MCP["MCP tool layer"]
-            REG["Registry<br/>9 tools, Zod schemas"]
+            REG["Registry<br/>MCP tools, Zod schemas"]
             PERM["Permission gate<br/>risk class and host"]
             EG["Egress guard<br/>SSRF, IP pinning, rate limit"]
             AUD["Audit writer<br/>append-only"]
@@ -205,7 +205,7 @@ machine is in [docs/03_App_Flow.md](docs/03_App_Flow.md).
 A tool that fetches URLs a user typed is an SSRF engine unless something stops it. AGENTIQ stops it
 in three layers.
 
-**1. Permissions, by risk class and host.** Asking someone to approve nine tools one at a time is
+**1. Permissions, by risk class and host.** Asking someone to approve every tool one at a time is
 theatre. Asking "may this app send attack-indicator payloads to `api.example.com`?" is a real
 decision.
 
@@ -323,7 +323,7 @@ AGENTIQ/
 │   ├── src/
 │   │   ├── agents/          testing · security · deployment (no I/O)
 │   │   ├── mcp/             registry · permissions · audit · egress guard · IP rules
-│   │   │   ├── tools/       the nine tools
+│   │   │   ├── tools/       one file per MCP tool
 │   │   │   └── probes/      baseline differential · database error fingerprints
 │   │   ├── services/        run orchestration · LLM · specs · stats · deployment · mail
 │   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · EmailVerification

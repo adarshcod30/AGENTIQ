@@ -253,7 +253,7 @@ duration. Search by URL, filter by verdict and date.
 records with post-deploy verification results. If scoped out: a plain notice saying so and linking
 to About.
 
-**Tool Registry**: table of nine tools: name (mono), title, description, risk chip, and an
+**Tool Registry**: a table of every registered tool: name (mono), title, description, risk chip, and an
 expandable live JSON Schema. Header note: *"Fetched from the running server's MCP registry. Nothing
 on this page is hardcoded."*
 

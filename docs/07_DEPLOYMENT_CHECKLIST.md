@@ -8,7 +8,7 @@ Check every item against a real boot with `NODE_ENV=production`, not by reading 
 
 | Check | Expected |
 | --- | --- |
-| Boots under `NODE_ENV=production` | Connects to Atlas, registers 9 tools, listens |
+| Boots under `NODE_ENV=production` | Connects to Atlas, registers its tools, listens |
 | `ALLOW_PRIVATE_TARGETS=true` in production | **Refused**: the server exits 1 and names the reason |
 | CORS locked to `CORS_ORIGIN` | Unknown origins get no `Access-Control-Allow-Origin` |
 | Security headers | CSP, HSTS, `X-Content-Type-Options`, `X-Frame-Options`; no `X-Powered-By` |
