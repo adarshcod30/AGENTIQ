@@ -61,6 +61,7 @@ describe('registry', () => {
       code_search: RISK_CLASS.LOCAL_FS_READ,
       ast_extract: RISK_CLASS.LOCAL_COMPUTE,
       discover_routes: RISK_CLASS.LOCAL_FS_READ,
+      app_lifecycle: RISK_CLASS.LOCAL_PROCESS,
     };
     for (const [name, riskClass] of Object.entries(expected)) {
       expect(getTool(name)?.riskClass, name).toBe(riskClass);
@@ -317,7 +318,7 @@ describe('GET /api/mcp/tools', () => {
     const res = await request(app).get('/api/mcp/tools');
     const names = res.body.data.riskClasses.map((c) => c.name).sort();
     expect(names).toEqual(
-      ['deploy.write', 'local.compute', 'local.fs.read', 'network.probe', 'network.read'],
+      ['deploy.write', 'local.compute', 'local.fs.read', 'local.process', 'network.probe', 'network.read'],
     );
     const probe = res.body.data.riskClasses.find((c) => c.name === 'network.probe');
     expect(probe.autoGranted).toBe(false);

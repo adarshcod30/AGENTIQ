@@ -31,6 +31,7 @@ export async function registerAllTools() {
     import('./code_search.js'),
     import('./ast_extract.js'),
     import('./discover_routes.js'),
+    import('./app_lifecycle.js'),
   ]);
 
   return TOOLS;
@@ -51,6 +52,7 @@ export const EXPECTED_TOOLS = [
   'code_search',
   'ast_extract',
   'discover_routes',
+  'app_lifecycle',
 ];
 
 export default registerAllTools;

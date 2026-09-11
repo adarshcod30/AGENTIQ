@@ -15,6 +15,7 @@
 export const RISK_CLASS = {
   LOCAL_COMPUTE: 'local.compute',
   LOCAL_FS_READ: 'local.fs.read',
+  LOCAL_PROCESS: 'local.process',
   NETWORK_READ: 'network.read',
   NETWORK_PROBE: 'network.probe',
   DEPLOY_WRITE: 'deploy.write',
@@ -37,6 +38,17 @@ export const RISK_CLASS_META = {
       'Reads files inside the one project workspace under assessment, and nowhere else. ' +
       'The filesystem jail (mcp/fsJail.js) enforces the boundary, which is why this is ' +
       'safe to auto-grant: a tool cannot read outside the workspace root it was given.',
+    autoGranted: true,
+    requiresHost: false,
+    requiresConfirmation: false,
+  },
+  [RISK_CLASS.LOCAL_PROCESS]: {
+    label: 'Run the project locally',
+    description:
+      'Starts, health-checks and stops the project under assessment as a local process, on ' +
+      'loopback only. The process sandbox (mcp/procSandbox.js) enforces the boundary: no shell, ' +
+      'an allowlisted runner, the workspace as the working directory, and a scrubbed environment ' +
+      'that never carries AGENTIQ secrets. In local mode this runs the user\'s own code.',
     autoGranted: true,
     requiresHost: false,
     requiresConfirmation: false,
