@@ -15,7 +15,7 @@ import { connectTestDb, disconnectTestDb } from './helpers/mongo.js';
 import { registerAllTools } from '../src/mcp/tools/index.js';
 import { getTool } from '../src/mcp/registry.js';
 import {
-  spawnSandboxed, childEnv, pickFreePort, ProcessError,
+  spawnSandboxed, childEnv, pickFreePort, killTree, ProcessError, DEFAULT_LIMITS,
 } from '../src/mcp/procSandbox.js';
 
 let workspace;
@@ -59,6 +59,27 @@ describe('process sandbox', () => {
     expect(env.JWT_SECRET).toBeUndefined();
     expect(env.MONGO_URI).toBeUndefined();
     expect(Object.keys(env).sort()).toEqual(['HOME', 'NODE_ENV', 'PATH', 'PORT']);
+  });
+
+  it('caps the child heap through NODE_OPTIONS when a limit is given', () => {
+    const env = childEnv(3000, { maxOldSpaceMb: 512 });
+    expect(env.NODE_OPTIONS).toBe('--max-old-space-size=512');
+    // The cap is the only addition; the rest of the environment is untouched.
+    expect(Object.keys(env).sort()).toEqual(['HOME', 'NODE_ENV', 'NODE_OPTIONS', 'PATH', 'PORT']);
+  });
+
+  it('exposes a resource ceiling with a heap cap and a lifetime backstop', () => {
+    expect(DEFAULT_LIMITS.maxOldSpaceMb).toBeGreaterThan(0);
+    expect(DEFAULT_LIMITS.maxLifetimeMs).toBeGreaterThan(0);
+    expect(DEFAULT_LIMITS.maxOutputBytes).toBeGreaterThan(0);
+  });
+
+  it('killTree is a no-op on a child that already exited, and never throws', () => {
+    expect(killTree(null)).toBe(false);
+    expect(killTree({ pid: undefined })).toBe(false);
+    // A pid that cannot exist: the group signal fails, the direct-kill fallback
+    // fails, and killTree reports false rather than throwing.
+    expect(killTree({ pid: 2147483646, kill: () => { throw new Error('gone'); } })).toBe(false);
   });
 
   it('pickFreePort returns a usable port', async () => {

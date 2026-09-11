@@ -20,7 +20,8 @@ import { defineTool } from '../registry.js';
 import { RISK_CLASS } from '../permissions.js';
 import { requireWorkspace } from './fs_read.js';
 import {
-  spawnSandboxed, pickFreePort, waitForPort, stopProcess, ProcessError, RUNNERS,
+  spawnSandboxed, pickFreePort, waitForPort, stopProcess, killTree, ProcessError, RUNNERS,
+  DEFAULT_LIMITS,
 } from '../procSandbox.js';
 
 /** workspaceRoot -> { child, port, baseUrl, runner, args, startedAt }. */
@@ -85,14 +86,23 @@ async function start(input, jail) {
   const child = spawnSandboxed({ runner: input.runner, args, cwd: root, port });
 
   let stderr = '';
+  let stdout = '';
   child.stderr?.on('data', (d) => { stderr = (stderr + d).slice(-STDERR_CAP); });
+  // Drain stdout to a bounded buffer. We never surface it, but an unread pipe
+  // fills its OS buffer (~64KB) and then a chatty child BLOCKS on write and looks
+  // hung. Draining and discarding beyond the cap keeps the child flowing without
+  // letting its output grow our memory.
+  child.stdout?.on('data', (d) => { stdout = (stdout + d).slice(-DEFAULT_LIMITS.maxOutputBytes); });
 
   // Race readiness against an early crash: whichever happens first wins.
   const exited = new Promise((resolve) => child.once('exit', (code) => resolve(code ?? 'signal')));
   try {
     await Promise.race([
       waitForPort(port, { timeoutMs: input.readyTimeoutMs }),
-      exited.then((code) => { throw new ProcessError(`App exited before it was ready (code ${code}). ${stderr.trim()}`, 'APP_CRASHED'); }),
+      exited.then((code) => {
+        const tail = (stderr.trim() || stdout.trim()).slice(-STDERR_CAP);
+        throw new ProcessError(`App exited before it was ready (code ${code}). ${tail}`, 'APP_CRASHED');
+      }),
     ]);
   } catch (err) {
     await stopProcess(child);
@@ -112,10 +122,10 @@ async function stop(root) {
   return { action: 'stop', running: false, port: null, baseUrl: null, pid: null, message: 'stopped' };
 }
 
-/** Kill every child when the server process goes away, so nothing is orphaned. */
+/** Kill every child (and its group) when the server goes away, so nothing is orphaned. */
 function killAll() {
   for (const { child } of running.values()) {
-    try { child.kill('SIGKILL'); } catch { /* already gone */ }
+    killTree(child, 'SIGKILL');
   }
   running.clear();
 }
