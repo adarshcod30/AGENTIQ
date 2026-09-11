@@ -7,7 +7,7 @@
  */
 import { Router } from 'express';
 import passport from 'passport';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import {
   registerUser, loginUser, logoutUser, currentUser, googleCallback,
   verifyEmail, resendVerification,
@@ -46,12 +46,23 @@ router.post('/verify', verifyEmail);
  * Keyed by USER, not IP: two people behind one NAT should not consume each
  * other's budget, and the route is authenticated so the user is always known.
  */
+/**
+ * The resend limiter's key. User id when known; otherwise the IP, run through
+ * ipKeyGenerator so an IPv6 range collapses to one key. Without that, a client
+ * with a /64 could use a fresh address per request and never hit the limit, the
+ * same bypass the egress guard prevents for outbound traffic. Exported so the
+ * keying can be tested directly (the limiter itself is skipped under test).
+ */
+export function resendRateKey(req) {
+  return String(req.user?._id ?? ipKeyGenerator(req.ip ?? ''));
+}
+
 const resendLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 3,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => String(req.user?._id ?? req.ip),
+  keyGenerator: resendRateKey,
   skip: () => env.NODE_ENV === 'test',
   message: {
     success: false,
