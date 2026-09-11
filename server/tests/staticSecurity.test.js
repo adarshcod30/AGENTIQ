@@ -88,6 +88,17 @@ describe('SAST scan', () => {
     expect(cats).toContain('weak-hash');
   });
 
+  it('catches command injection built by string-literal concatenation', () => {
+    // The textbook shape: exec("cmd " + userInput). An earlier pattern only
+    // caught template interpolation and bare-variable concatenation, and missed
+    // this, which is a critical false negative.
+    const cats = scanSource([
+      { path: 'a.js', content: 'exec("ls " + req.query.dir)' },
+      { path: 'b.js', content: 'execSync("git log " + req.params.ref)' },
+    ]).map((f) => f.category);
+    expect(cats.filter((c) => c === 'command-injection')).toHaveLength(2);
+  });
+
   it('marks static findings as potential, not confirmed', () => {
     const found = scanSource([{ path: 'h.js', content: 'eval(x)' }]);
     expect(found[0].confidence).toBe('potential');

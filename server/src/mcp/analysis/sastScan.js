@@ -23,7 +23,12 @@ const RULES = [
   },
   {
     category: 'command-injection', severity: SEVERITY.CRITICAL, owasp: 'API8:2023',
-    re: /\b(?:exec|execSync|spawn|spawnSync)\s*\(\s*[`'"][^`'"]*\$\{|\bexec\s*\(\s*\w+\s*\+/,
+    // Catches the three shapes that actually appear: a template literal with
+    // interpolation (exec(`ls ${x}`)), a string literal then concatenation
+    // (exec("ls " + x)), and a bare variable then concatenation (exec(cmd + x)).
+    // The string-literal-then-concat shape is the textbook one, and the earlier
+    // pattern missed it.
+    re: /\b(?:exec|execSync|spawn|spawnSync)\s*\(\s*(?:[`'"][^`'"]*(?:\$\{|[`'"]\s*\+)|\w+\s*\+)/,
     title: 'Possible command injection: a shell command built from a variable',
     remediation: 'Pass arguments as an array to spawn, never build a shell string from input.',
   },
