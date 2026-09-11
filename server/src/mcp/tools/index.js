@@ -37,6 +37,8 @@ export async function registerAllTools() {
     import('./sast_scan.js'),
     import('./config_scan.js'),
     import('./dep_audit.js'),
+    // Report (docs/10_AUTONOMOUS_PLATFORM.md, Phase 5).
+    import('./report_render.js'),
   ]);
 
   return TOOLS;
@@ -62,6 +64,7 @@ export const EXPECTED_TOOLS = [
   'sast_scan',
   'config_scan',
   'dep_audit',
+  'report_render',
 ];
 
 export default registerAllTools;

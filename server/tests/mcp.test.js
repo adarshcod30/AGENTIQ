@@ -66,6 +66,7 @@ describe('registry', () => {
       sast_scan: RISK_CLASS.LOCAL_FS_READ,
       config_scan: RISK_CLASS.LOCAL_FS_READ,
       dep_audit: RISK_CLASS.LOCAL_PROCESS,
+      report_render: RISK_CLASS.LOCAL_COMPUTE,
     };
     for (const [name, riskClass] of Object.entries(expected)) {
       expect(getTool(name)?.riskClass, name).toBe(riskClass);
