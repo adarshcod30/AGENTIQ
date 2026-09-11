@@ -14,6 +14,10 @@
  * individually audited anyway.
  */
 import { SEVERITY } from '../mcp/probes/baseline.js';
+import {
+  makeFinding, correlateFindings, dedupeFindings, rankFindings, countBySeverity as countFindingsBySeverity,
+  CONFIDENCE, LANE,
+} from '../mcp/analysis/findings.js';
 
 /** The six families, in the order the UI shows them. */
 export const FAMILIES = [
@@ -183,6 +187,85 @@ export async function runSecurityAgent({
       disclaimer:
         `${results.length} checks run, ${findings.length} indicator(s) found. This is not a ` +
         'guarantee of security. See About for what is and is not covered.',
+    },
+  };
+}
+
+// ── Static lanes and the unified assessment (Phase 3) ────────────────────────
+
+/** Maps a DAST probe finding onto the shared finding shape. */
+export function dastToFinding(probeFinding, { endpoint = null } = {}) {
+  return makeFinding({
+    lane: LANE.DAST,
+    category: probeFinding.family,
+    owasp: probeFinding.owasp ?? null,
+    severity: probeFinding.severity,
+    // A probe demonstrated it against the running app: this is the confirmed end
+    // of the confidence ladder, the counterweight to a static lead.
+    confidence: CONFIDENCE.CONFIRMED,
+    title: probeFinding.explanation?.split('.')[0] ?? probeFinding.family,
+    description: probeFinding.explanation ?? '',
+    evidence: [probeFinding.payload, probeFinding.signal].filter(Boolean).join(' -> '),
+    remediation: probeFinding.remediation ?? '',
+    location: { endpoint },
+  });
+}
+
+/** The four static tools that need no running app. Runs them, collects findings. */
+export async function runStaticSecurity({ runTool, context = {} }) {
+  const lanes = ['secret_scan', 'sast_scan', 'config_scan', 'dep_audit'];
+  const findings = [];
+  const notes = [];
+  for (const tool of lanes) {
+    try {
+      const out = await runTool(tool, {}, context);
+      if (out.findings?.length) findings.push(...out.findings);
+      if (out.note) notes.push(`${tool}: ${out.note}`);
+    } catch (err) {
+      notes.push(`${tool} failed: ${err.message}`);
+    }
+  }
+  return { findings, notes };
+}
+
+/**
+ * The full security assessment: the dynamic probes against the running app AND
+ * the static lanes against the workspace, mapped to one shape, de-duplicated and
+ * correlated so a static lead and a dynamic proof about the same route become
+ * one finding. docs/10_AUTONOMOUS_PLATFORM.md §D.
+ */
+export async function runSecurityAssessment({
+  url, method = 'GET', headers = {}, body, intendedPublic = false,
+  families = FAMILIES.map((f) => f.key), runStatic = true, runTool, context = {},
+}) {
+  const endpointLabel = url ? `${method} ${new URL(url).pathname}` : null;
+
+  const dast = url
+    ? await runSecurityAgent({ url, method, headers, body, intendedPublic, families, runTool, context })
+    : { findings: [], families: [], summary: null };
+  const dastFindings = dast.findings.map((f) => dastToFinding(f, { endpoint: endpointLabel }));
+
+  const staticResult = runStatic
+    ? await runStaticSecurity({ runTool, context })
+    : { findings: [], notes: [] };
+
+  const all = correlateFindings(dedupeFindings([...dastFindings, ...staticResult.findings]));
+  const findings = rankFindings(all);
+
+  return {
+    findings,
+    dast: dast.families,
+    notes: staticResult.notes,
+    summary: {
+      total: findings.length,
+      bySeverity: countFindingsBySeverity(findings),
+      lanes: {
+        dast: dastFindings.length,
+        static: staticResult.findings.length,
+      },
+      disclaimer:
+        `${findings.length} finding(s) after correlating dynamic probes and static analysis. `
+        + 'This is not a guarantee of security. See About for what is and is not covered.',
     },
   };
 }
