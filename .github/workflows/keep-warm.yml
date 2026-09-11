@@ -1,0 +1,37 @@
+name: Keep warm
+
+# Free-tier hosting sleeps an idle service, and the first request after that
+# pays a cold start of 30s or more.
+#
+# A self-ping from inside the process would not help: the platform sleeps on an
+# absence of INBOUND traffic, so the request has to come from outside. This is
+# that outside.
+#
+# It no-ops cleanly until the deployment exists. Set the repository variable
+# HEALTH_URL (Settings → Secrets and variables → Actions → Variables) to the
+# deployed https://…/api/health once it is live.
+
+on:
+  schedule:
+    # Every 10 minutes. Render sleeps after 15 minutes idle.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "HEALTH_URL is not set, nothing deployed yet. Skipping."
+            exit 0
+          fi
+          code=$(curl -s -o /tmp/health.json -w '%{http_code}' --max-time 60 "$HEALTH_URL")
+          echo "HTTP $code"
+          cat /tmp/health.json
+          # A cold start answers slowly but still answers; only a non-2xx is a
+          # real failure worth a red X in the Actions tab.
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

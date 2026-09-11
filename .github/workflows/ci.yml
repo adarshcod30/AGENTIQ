@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch cancels the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: install → lint → typecheck → test
+    runs-on: ubuntu-latest
+
+    # A real MongoDB, already running before the job starts.
+    #
+    # The alternative, mongodb-memory-server, downloads a mongod binary on
+    # first use. That caches fine on a developer machine but on a fresh runner
+    # it is a network download on the critical path, and it is what made the
+    # first three CI runs fail while the identical suite passed locally.
+    # tests/helpers/mongo.js uses MONGO_TEST_URI when present and falls back to
+    # mongodb-memory-server otherwise, so local development still needs no setup.
+    services:
+      mongo:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          # Reads .nvmrc so CI and local development cannot drift apart.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+        env:
+          # No secrets here, and none are needed: tests/setup.js supplies
+          # deterministic values and config/env.js skips .env entirely when
+          # NODE_ENV=test, so a result can never depend on whose machine ran it.
+          NODE_ENV: test
+          CI: 'true'
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017
+
+      # Runs the server suite again under v8 instrumentation and FAILS the build
+      # if src/mcp/** or src/agents/** drops below the 70% gate in
+      # docs/02_TRD.md §11.
+      - name: Coverage gate (mcp/** and agents/** >= 70%)
+        run: npm --workspace server run test:coverage
+        env:
+          NODE_ENV: test
+          CI: 'true'
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017
+
+      - name: Audit (high and critical only)
+        run: npm audit --audit-level=high
+
+      - name: Architecture guard summary
+        if: always()
+        run: |
+          echo "### Architecture guard" >> "$GITHUB_STEP_SUMMARY"
+          echo "Agents must perform no I/O: they may only call MCP tools." >> "$GITHUB_STEP_SUMMARY"
+          echo "Enforced by server/tests/architecture.test.js, which fails the" >> "$GITHUB_STEP_SUMMARY"
+          echo "build if axios/fetch/http.request appears under server/src/agents/**." >> "$GITHUB_STEP_SUMMARY"

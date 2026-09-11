@@ -1,0 +1,24 @@
+{
+  "name": "agentiq-fixtures",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Evaluation fixtures: vulnerable-api and hardened-api (docs/01_PRD.md F10)",
+  "type": "module",
+  "scripts": {
+    "start": "concurrently -n vulnerable,hardened -c red,green \"node vulnerable-api/server.js\" \"node hardened-api/server.js\"",
+    "start:vulnerable": "node vulnerable-api/server.js",
+    "start:hardened": "node hardened-api/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "express-rate-limit": "8.6.2",
+    "helmet": "8.3.0"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5",
+    "supertest": "7.2.2",
+    "vitest": "4.1.11"
+  },
+  "license": "MIT"
+}

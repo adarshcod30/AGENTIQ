@@ -1,0 +1,59 @@
+{
+  "name": "agentiq-workspace",
+  "version": "1.0.0",
+  "description": "Agentic platform for API testing and security validation, where every outbound request passes through a permission-checked, SSRF-guarded, audited MCP tool layer.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "server",
+    "web",
+    "fixtures"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "fixtures": "npm --workspace fixtures run start",
+    "build": "npm --workspace web run build",
+    "test": "npm --workspace server run test && npm --workspace fixtures run test",
+    "lint": "npm --workspace server run lint",
+    "typecheck": "npm --workspace web run typecheck",
+    "migrate:users": "npm --workspace server run migrate:users",
+    "evaluate": "node evaluation/run.js",
+    "test:server": "npm --workspace server run test",
+    "test:fixtures": "npm --workspace fixtures run test",
+    "start": "npm --workspace server run start"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5"
+  },
+  "author": "Adarsh Dwivedi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adarshcod30/AGENTIQ.git"
+  },
+  "homepage": "https://github.com/adarshcod30/AGENTIQ#readme",
+  "bugs": {
+    "url": "https://github.com/adarshcod30/AGENTIQ/issues"
+  },
+  "keywords": [
+    "api-testing",
+    "security-testing",
+    "owasp",
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "ai-agents",
+    "ssrf",
+    "openapi"
+  ],
+  "overrides": {
+    "fast-uri": "^3.1.7",
+    "hono": "^4.13.7",
+    "qs": "^6.16.0"
+  }
+}
