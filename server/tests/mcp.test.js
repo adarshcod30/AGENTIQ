@@ -62,6 +62,10 @@ describe('registry', () => {
       ast_extract: RISK_CLASS.LOCAL_COMPUTE,
       discover_routes: RISK_CLASS.LOCAL_FS_READ,
       app_lifecycle: RISK_CLASS.LOCAL_PROCESS,
+      secret_scan: RISK_CLASS.LOCAL_FS_READ,
+      sast_scan: RISK_CLASS.LOCAL_FS_READ,
+      config_scan: RISK_CLASS.LOCAL_FS_READ,
+      dep_audit: RISK_CLASS.LOCAL_PROCESS,
     };
     for (const [name, riskClass] of Object.entries(expected)) {
       expect(getTool(name)?.riskClass, name).toBe(riskClass);

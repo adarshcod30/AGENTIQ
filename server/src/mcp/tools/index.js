@@ -32,6 +32,11 @@ export async function registerAllTools() {
     import('./ast_extract.js'),
     import('./discover_routes.js'),
     import('./app_lifecycle.js'),
+    // Static security lanes (docs/10_AUTONOMOUS_PLATFORM.md, Phase 3).
+    import('./secret_scan.js'),
+    import('./sast_scan.js'),
+    import('./config_scan.js'),
+    import('./dep_audit.js'),
   ]);
 
   return TOOLS;
@@ -53,6 +58,10 @@ export const EXPECTED_TOOLS = [
   'ast_extract',
   'discover_routes',
   'app_lifecycle',
+  'secret_scan',
+  'sast_scan',
+  'config_scan',
+  'dep_audit',
 ];
 
 export default registerAllTools;

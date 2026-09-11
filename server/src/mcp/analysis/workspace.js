@@ -58,6 +58,21 @@ export function walkWorkspace(jail, { maxFiles = 5000, exts = SOURCE_EXTS, filte
 }
 
 /**
+ * Walks the workspace and returns readable files as { path, content }, bounded
+ * on count and per-file size. Skips files that could not be read. Shared by the
+ * static analysis tools, which all need the same "give me the source" step.
+ */
+export function collectWorkspaceFiles(jail, { maxFiles = 5000, exts = SOURCE_EXTS, maxBytes = 512 * 1024 } = {}) {
+  const { files, truncated } = walkWorkspace(jail, { maxFiles, exts });
+  const out = [];
+  for (const rel of files) {
+    const content = readTextInJail(jail, rel, maxBytes);
+    if (content !== null) out.push({ path: rel, content });
+  }
+  return { files: out, truncated };
+}
+
+/**
  * Reads a workspace file as UTF-8 text through the jail, capped at maxBytes.
  * Returns null for a file that does not exist or is not readable, so a caller
  * walking many files is not derailed by one bad entry.
