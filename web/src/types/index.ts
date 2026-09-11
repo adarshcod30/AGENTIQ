@@ -284,6 +284,19 @@ export interface Clarification {
   answer: string | null;
 }
 
+export interface AssessmentReport {
+  generatedAt: string;
+  project: { framework: string; endpointCount: number; dependencyCount: number };
+  discoveredApis: { method: string; path: string; intent: string | null; confidence: string | null }[];
+  testing: {
+    endpointsTested: number;
+    endpointsSkipped: number;
+    endpointsWithFailures: string[];
+  };
+  security: { total: number; bySeverity: Record<string, number>; notes: string[] };
+  readiness: { ready: boolean; blockers: string[]; warnings: string[] };
+}
+
 export interface Assessment {
   _id: string;
   projectId: string;
@@ -298,7 +311,7 @@ export interface Assessment {
   };
   clarifications: Clarification[];
   readiness: { ready: boolean; blockers: string[]; warnings: string[] };
-  report: unknown | null;
+  report: AssessmentReport | null;
   error?: { code: string; message: string };
   startedAt: string;
   finishedAt: string | null;

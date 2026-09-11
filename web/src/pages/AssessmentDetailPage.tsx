@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle, UploadCloud } from 'lucide-react';
 import { useAssessment, useAnswerClarification } from '@/hooks/api';
 import { ProgressList, type ProgressStep, type StepState } from '@/components/ui/ProgressList';
 import {
@@ -201,6 +201,60 @@ export function AssessmentDetailPage() {
           )}
         </CardBody>
       </Card>
+
+      {a.report && (
+        <Card>
+          <CardHeader title="Consolidated report" />
+          <CardBody className="space-y-4">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+              <span><span className="t-label">Framework</span> {a.report.project.framework}</span>
+              <span><span className="t-label">Endpoints</span> {a.report.project.endpointCount}</span>
+              <span><span className="t-label">Dependencies</span> {a.report.project.dependencyCount}</span>
+              <span><span className="t-label">Tested</span> {a.report.testing.endpointsTested} (skipped {a.report.testing.endpointsSkipped})</span>
+            </div>
+
+            {a.report.discoveredApis.length > 0 && (
+              <div className="overflow-x-auto rounded-[6px] border border-line">
+                <table className="w-full text-[12.5px]">
+                  <thead className="bg-surface-2 text-ink-muted">
+                    <tr><th className="px-3 py-1.5 text-left">Method</th><th className="px-3 py-1.5 text-left">Path</th><th className="px-3 py-1.5 text-left">Intent</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {a.report.discoveredApis.map((e, i) => (
+                      <tr key={i}>
+                        <td className="t-mono px-3 py-1.5">{e.method}</td>
+                        <td className="t-mono px-3 py-1.5">{e.path}</td>
+                        <td className="px-3 py-1.5 text-ink-muted">{e.intent ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {a.report.testing.endpointsWithFailures.length > 0 && (
+              <div>
+                <p className="t-label mb-1">Endpoints with failures</p>
+                <ul className="t-small list-disc space-y-0.5 pl-5 text-ink-muted">
+                  {a.report.testing.endpointsWithFailures.map((e, i) => <li key={i} className="t-mono">{e}</li>)}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
+              <span className="t-small text-ink-muted">
+                {a.readiness.ready
+                  ? 'This project passed the readiness checks.'
+                  : 'Resolve the blockers above before deploying.'}
+              </span>
+              <Link to="/deploy"
+                className="t-small inline-flex items-center gap-1.5 rounded-[6px] bg-primary px-3 py-1.5 font-medium text-white hover:opacity-90">
+                <UploadCloud size={15} aria-hidden /> Deploy this project
+              </Link>
+            </div>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }
