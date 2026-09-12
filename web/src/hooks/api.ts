@@ -272,8 +272,16 @@ export function useCreateProject() {
 export function useUpdateProjectEnv() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { id: string; runtimeEnv: Record<string, string> }) =>
-      apiPatch<{ id: string; runtimeEnvKeys: string[] }>(`/projects/${vars.id}/env`, { runtimeEnv: vars.runtimeEnv }),
+    // Each field is sent only when provided, so saving env does not clear the
+    // start script and vice versa. An empty startScript string clears it.
+    mutationFn: (vars: { id: string; runtimeEnv?: Record<string, string>; startScript?: string }) =>
+      apiPatch<{ id: string; runtimeEnvKeys: string[]; startScript: string | null }>(
+        `/projects/${vars.id}/env`,
+        {
+          ...(vars.runtimeEnv !== undefined ? { runtimeEnv: vars.runtimeEnv } : {}),
+          ...(vars.startScript !== undefined ? { startScript: vars.startScript } : {}),
+        },
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   });
 }

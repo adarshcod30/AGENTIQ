@@ -14,6 +14,21 @@ import { findingSchema } from './_findingSchema.js';
 
 const EXTS = new Set([...SOURCE_EXTS, '.env', '.txt', '.sh', '.pem', '.key', '.config']);
 
+/**
+ * Secret-bearing files whose basename has no usable extension. path.extname()
+ * returns '' for a dot-led name, so `.env`, `.env.production` and `id_rsa` slip
+ * past an extension filter: exactly the files most likely to hold a real
+ * credential. These are matched by name instead.
+ *
+ * `.env.example` / `.env.sample` match here too, on purpose: they are walked,
+ * then scanContentForSecrets skips them, so a real `.env` sitting next to a
+ * committed example is still read rather than mistaken for the placeholder.
+ */
+const SECRET_BASENAMES = new Set(['.npmrc', '.pgpass', '.netrc', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519']);
+export function isSecretFile(basename) {
+  return /^\.env(\..+)?$/.test(basename) || SECRET_BASENAMES.has(basename);
+}
+
 export const inputSchema = z.object({ maxFiles: z.number().int().positive().max(20000).default(5000) });
 export const outputSchema = z.object({
   findings: z.array(findingSchema),
@@ -29,7 +44,7 @@ export default defineTool({
   outputSchema,
   async handler(input, context) {
     const jail = requireWorkspace(context);
-    const { files } = collectWorkspaceFiles(jail, { maxFiles: input.maxFiles, exts: EXTS });
+    const { files } = collectWorkspaceFiles(jail, { maxFiles: input.maxFiles, exts: EXTS, matchName: isSecretFile });
     const findings = scanSecrets(files);
     return { findings, stats: { filesScanned: files.length, findingCount: findings.length } };
   },

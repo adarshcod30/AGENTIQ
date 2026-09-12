@@ -1,3 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="AGENTIQ">
-  <path fill="#1B4D89" fill-rule="evenodd" d="M256.00 10.00L42.96 133.00L42.96 379.00L256.00 502.00L469.04 379.00L469.04 133.00Z M167.48 345.00 226.85 167.00H283.36L344.52 345.00H297.21L272.49 267.23Q266.51 247.76 260.96 225.84Q255.40 203.91 249.79 180.38H259.23Q253.85 204.03 248.83 225.96Q243.81 247.88 238.20 267.23L214.31 345.00ZM207.86 307.13V274.88H304.26V307.13Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="AGENTIQ">
+  <defs>
+    <linearGradient id="aq" x1="2" y1="1" x2="30" y2="31" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B4D89"/>
+      <stop offset="1" stop-color="#2A66CC"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="30" height="30" rx="8.5" fill="url(#aq)"/>
+  <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <path d="M8 24.4 L16 7 L24 24.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M11.8 18.1 H20.2" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
 </svg>

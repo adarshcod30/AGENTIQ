@@ -91,9 +91,17 @@ export function defaultDeps() {
  * so the testing tools may reach it: the user consented to the assessment, and
  * the target is the app the platform itself just started on loopback.
  */
-async function defaultEnsureApp({ runTool, context, scripts, userId, sessionId, runtimeEnv = null }) {
-  const script = ['dev', 'start', 'serve'].find((s) => scripts?.[s]);
-  if (!script) return { baseUrl: null, note: 'No dev/start/serve script; the app was not started.' };
+async function defaultEnsureApp({ runTool, context, scripts, userId, sessionId, runtimeEnv = null, startScript = null }) {
+  // An explicit start script (set by the user, e.g. for a monorepo) wins over
+  // the dev/start/serve guess. It is a script NAME run through the sandbox
+  // (`npm run <script>`), never a shell command.
+  const script = startScript || ['dev', 'start', 'serve'].find((s) => scripts?.[s]);
+  if (!script) {
+    return {
+      baseUrl: null,
+      note: 'No start script is set and no dev/start/serve script was found, so the app was not started. Set a start script under Live testing to enable it.',
+    };
+  }
   const status = await runTool('app_lifecycle', { action: 'status' }, context);
   const started = status.running
     ? status
@@ -117,7 +125,7 @@ async function phaseDiscover(assessment, project, ctx, deps) {
   return { model, discovery };
 }
 
-async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null }) {
+async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
 
   // A project that will not start in a scrubbed sandbox (a monorepo dev script,
@@ -130,7 +138,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
   try {
     app = await deps.ensureApp({
       runTool: ctx.runTool, context: ctx.context, scripts: model.scripts,
-      userId: String(assessment.userId), sessionId: ctx.sessionId, runtimeEnv,
+      userId: String(assessment.userId), sessionId: ctx.sessionId, runtimeEnv, startScript,
     });
   } catch (err) {
     logger.warn({ assessmentId: String(assessment._id), err: err.message },
@@ -245,6 +253,7 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
   const project = await Project.findById(assessment.projectId).select('+runtimeEnv');
   if (!project) return finishFailed(assessment, new AssessmentError('Project gone', 'PROJECT_GONE', 409));
   const runtimeEnv = project.runtimeEnv ? Object.fromEntries(project.runtimeEnv) : null;
+  const startScript = project.startScript ?? null;
 
   let jail;
   try {
@@ -264,7 +273,7 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
       ({ model } = await phaseDiscover(assessment, project, ctx, deps));
     }
     if (before(assessment.state, S.SCANNING)) {
-      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv });
+      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv, startScript });
       if (paused) return assessment; // waits for an answer
     }
     if (before(assessment.state, S.ANALYZING)) await phaseScan(assessment, model, ctx, deps);

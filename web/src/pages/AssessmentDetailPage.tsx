@@ -7,14 +7,20 @@
  * question is answered here and the pipeline resumes.
  */
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle, UploadCloud, Download } from 'lucide-react';
-import { useAssessment, useAnswerClarification, downloadAssessmentReport } from '@/hooks/api';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft, HelpCircle, CheckCircle2, AlertTriangle, UploadCloud, Download, PlugZap, RefreshCw,
+} from 'lucide-react';
+import {
+  useAssessment, useAnswerClarification, downloadAssessmentReport,
+  useUpdateProjectEnv, useCreateAssessment,
+} from '@/hooks/api';
 import { ProgressList, type ProgressStep, type StepState } from '@/components/ui/ProgressList';
 import {
-  Card, CardHeader, CardBody, Button, Field, Input, Alert, Chip, SeverityChip, Skeleton, EmptyState,
+  Card, CardHeader, CardBody, Button, Field, Input, Textarea, Switch, Alert, Chip, SeverityChip, Skeleton, EmptyState,
 } from '@/components/ui';
-import { AssessChip } from './ProjectsPage';
+import { ApiError } from '@/services/api';
+import { AssessChip, parseEnv } from './ProjectsPage';
 import type { Assessment, AssessState, Severity, Recommendation } from '@/types';
 
 /** Priority styling for a recommendation: colour of the left rule and the chip. */
@@ -85,6 +91,9 @@ export function AssessmentDetailPage() {
 
   const a = data.assessment;
   const pending = a.clarifications.filter((c) => !c.answer);
+  // The app never booted (no base URL) yet endpoints were found. Offer to set the
+  // env and start command and re-run, so those endpoints can be tested live.
+  const appNotStarted = a.state === 'COMPLETE' && !a.baseUrl && a.endpoints.length > 0;
 
   return (
     <div className="max-w-4xl space-y-4">
@@ -104,6 +113,8 @@ export function AssessmentDetailPage() {
         <CardHeader title="Progress" />
         <CardBody><ProgressList steps={buildSteps(a)} /></CardBody>
       </Card>
+
+      {appNotStarted && <LiveTestingPanel a={a} />}
 
       {a.state === 'AWAITING_INPUT' && pending.length > 0 && (
         <Card className="border-warning/40">
@@ -309,6 +320,88 @@ export function AssessmentDetailPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * Shown when the app never booted but endpoints were found. Lets the user give
+ * the app what it needs to start (env vars, a start command) and re-run, so the
+ * endpoints get tested live. The env is written to the project server-side and
+ * never comes back to the browser; the start command is an npm script name that
+ * the sandbox runs, never a shell command.
+ */
+function LiveTestingPanel({ a }: { a: Assessment }) {
+  const navigate = useNavigate();
+  const updateEnv = useUpdateProjectEnv();
+  const reRun = useCreateAssessment();
+  const [envOn, setEnvOn] = useState(false);
+  const [envText, setEnvText] = useState('');
+  const [startScript, setStartScript] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const reason = a.security.notes.find((n) => /not started|could not be started|no start script/i.test(n))
+    ?? 'The app was not started, so its endpoints were not tested live.';
+  const busy = updateEnv.isPending || reRun.isPending;
+
+  const saveAndReRun = async () => {
+    setError(null);
+    try {
+      await updateEnv.mutateAsync({
+        id: a.projectId,
+        ...(envOn ? { runtimeEnv: parseEnv(envText) } : {}),
+        startScript: startScript.trim(),
+      });
+      const { assessment } = await reRun.mutateAsync({ projectId: a.projectId });
+      navigate(`/assessments/${assessment._id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not re-run the assessment.');
+    }
+  };
+
+  return (
+    <Card className="border-warning/40">
+      <CardHeader title="Live testing" />
+      <CardBody className="space-y-4">
+        <div className="flex items-start gap-2">
+          <PlugZap size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+          <p className="t-small text-ink">
+            {reason} Give the app what it needs to boot, then re-run: AGENTIQ starts it in the
+            sandbox and tests every endpoint live.
+          </p>
+        </div>
+
+        <Switch
+          checked={envOn} onChange={setEnvOn}
+          label="Provide environment variables"
+          hint="The values your app reads to start (a database URL, a secret). Stored on the server with your project, never sent back to the browser, and cannot override PORT."
+        />
+
+        {envOn && (
+          <Textarea
+            mono rows={4} value={envText} onChange={(e) => setEnvText(e.target.value)}
+            placeholder={'MONGO_URI=mongodb://localhost:27017/app\nJWT_SECRET=…'}
+            aria-label="Environment variables, KEY=VALUE per line"
+          />
+        )}
+
+        <Field
+          label="Start command (optional)" htmlFor="live-start"
+          hint="The npm script that starts your server, run as `npm run <name>`. Leave blank to try dev, start or serve. Useful for a monorepo, e.g. dev:backend."
+        >
+          <Input id="live-start" mono value={startScript} placeholder="dev"
+            onChange={(e) => setStartScript(e.target.value)} />
+        </Field>
+
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button loading={busy} onClick={() => void saveAndReRun()}>
+            <RefreshCw size={15} aria-hidden /> Save and re-run
+          </Button>
+          <span className="t-small text-ink-subtle">Starts a fresh assessment with these settings.</span>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

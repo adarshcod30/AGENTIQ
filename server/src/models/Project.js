@@ -30,14 +30,24 @@ const projectSchema = new mongoose.Schema({
    * worker asks for it explicitly. The names of the keys are all the UI ever sees.
    */
   runtimeEnv: { type: Map, of: String, default: undefined, select: false },
+
+  /**
+   * Optional npm script that starts the app under test, e.g. "dev:backend".
+   * When the root dev/start/serve script does not boot a single server (a
+   * monorepo, an unusual name), the user names the right one here and the
+   * sandbox runs `npm run <startScript>`. It is a script NAME, not a shell
+   * command, so it stays inside the allowlisted runner. Not a secret, so unlike
+   * runtimeEnv it is returned to the UI.
+   */
+  startScript: { type: String, default: undefined, trim: true, maxlength: 60 },
 }, { timestamps: true });
 
 projectSchema.index({ userId: 1, createdAt: -1 });
 
 /** Never leak internals the client does not need. */
 projectSchema.methods.toJSON = function toJSON() {
-  const { _id, name, workspaceRoot, lastDiscoveryAt, createdAt, updatedAt } = this;
-  return { id: _id, name, workspaceRoot, lastDiscoveryAt, createdAt, updatedAt };
+  const { _id, name, workspaceRoot, startScript, lastDiscoveryAt, createdAt, updatedAt } = this;
+  return { id: _id, name, workspaceRoot, startScript: startScript ?? null, lastDiscoveryAt, createdAt, updatedAt };
 };
 
 export const Project = mongoose.models.Project ?? mongoose.model('Project', projectSchema);

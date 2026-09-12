@@ -21,7 +21,7 @@ import { ApiError } from '@/services/api';
 import type { AssessState } from '@/types';
 
 /** KEY=VALUE per line -> an object. Blank lines and #comments ignored. */
-function parseEnv(text: string): Record<string, string> {
+export function parseEnv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const line of text.split('\n')) {
     const t = line.trim();

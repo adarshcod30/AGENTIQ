@@ -47,17 +47,26 @@ export async function createProject({ userId, name, workspaceRoot, runtimeEnv })
 }
 
 /**
- * Replaces a project's opt-in runtime environment. Owner-scoped. Returns the key
- * NAMES only, never the values, so a caller can confirm what is set without the
- * secrets travelling back out.
+ * Updates a project's opt-in runtime config: the environment the app needs to
+ * start, and optionally the npm script that starts it. Owner-scoped. Each field
+ * is applied only when the caller sends it (`undefined` means "leave as is"), so
+ * saving env does not wipe the start script and vice versa. Returns the env key
+ * NAMES only, never the values, so the secrets never travel back out.
  */
-export async function updateProjectEnv({ userId, projectId, runtimeEnv }) {
+export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScript }) {
   const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
   if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
-  const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
-  project.runtimeEnv = hasEnv ? runtimeEnv : undefined;
+  if (runtimeEnv !== undefined) {
+    const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
+    project.runtimeEnv = hasEnv ? runtimeEnv : undefined;
+  }
+  if (startScript !== undefined) {
+    const trimmed = typeof startScript === 'string' ? startScript.trim() : '';
+    project.startScript = trimmed ? trimmed : undefined;
+  }
   await project.save();
-  return { id: project._id, runtimeEnvKeys: hasEnv ? Object.keys(runtimeEnv) : [] };
+  const keys = project.runtimeEnv ? [...project.runtimeEnv.keys()] : [];
+  return { id: project._id, runtimeEnvKeys: keys, startScript: project.startScript ?? null };
 }
 
 /** The tool runner, carrying the project workspace so fs tools stay in the jail. */

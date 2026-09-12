@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiPost, ApiError, API_BASE_URL } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { Button, Card, Field, Input, Alert } from '@/components/ui';
+import { LogoMark } from '@/components/Brand';
 import type { User } from '@/types';
 
 /** docs/04_App_UI.md §7: centred 400px card, clear error text. */
@@ -39,11 +40,9 @@ export function LoginPage({ signup = false }: { signup?: boolean }) {
   return (
     <div className="grid min-h-screen place-items-center bg-surface-2 p-4">
       <div className="w-full max-w-[400px]">
-        <div className="mb-6 flex items-center justify-center gap-2">
-          <div className="grid size-7 place-items-center rounded-[4px] bg-primary text-xs font-bold text-white">
-            A
-          </div>
-          <span className="text-lg font-semibold tracking-tight">AGENTIQ</span>
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <LogoMark size={46} />
+          <span className="text-[19px] font-semibold tracking-[-0.02em]">AGENTIQ</span>
         </div>
 
         <Card className="p-6">

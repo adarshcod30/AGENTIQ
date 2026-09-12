@@ -8,12 +8,19 @@
  *
  * Fonts are self-hosted via @fontsource: a CDN that is slow or blocked during
  * a viva would reflow the entire interface mid-demo.
+ *
+ * REFINED-PRO PASS: the palette, type scale, elevation and radii here were
+ * tightened for more depth and presence without touching the semantic rule
+ * that colour means meaning (red is a finding, amber a warning, green a pass).
+ * Every token NAME is unchanged, so pages keep working; only values moved, and
+ * a few tokens were added (primary-100, gradient-brand, the shadow ramp).
  */
 @import "tailwindcss";
 
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 
@@ -21,21 +28,27 @@
   /* Brand: deep, sober blue. Chrome, primary actions, active nav. */
   --color-primary:      #1B4D89;
   --color-primary-700:  #143A68;
+  --color-primary-100:  #DCE7F5;  /* hover fills, quiet selected states */
   --color-primary-50:   #EDF3FA;
 
   /* Interactive: links, focus, selected */
   --color-accent:       #2563C9;
   --color-accent-50:    #EAF1FC;
 
+  /* One sanctioned brand gradient. Logo, brand chrome, hero moments only:
+     never behind text or as a decorative fill on data. */
+  --gradient-brand: linear-gradient(135deg, #1B4D89 0%, #2A66CC 100%);
+
   /* Surfaces */
   --color-surface:      #FFFFFF;   /* cards, panels */
-  --color-surface-2:    #F6F8FB;   /* app background */
-  --color-surface-3:    #EDF1F7;   /* wells, table headers, code blocks */
-  --color-line:         #DDE4ED;   /* borders, dividers */
+  --color-surface-2:    #F4F7FB;   /* app background */
+  --color-surface-3:    #EAEFF6;   /* wells, table headers, code blocks */
+  --color-line:         #DCE3EC;   /* borders, dividers */
+  --color-line-strong:  #C6D0DD;   /* emphasised dividers, input borders on hover */
 
   /* Text */
-  --color-ink:          #131A24;
-  --color-ink-muted:    #5A6779;
+  --color-ink:          #121926;
+  --color-ink-muted:    #566173;
   --color-ink-subtle:   #8A94A3;
 
   /* Semantic: findings, verdicts, status. Use ONLY for meaning. */
@@ -64,12 +77,16 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --radius-card: 8px;
-  --radius-ctl:  6px;
+  --radius-card: 10px;
+  --radius-ctl:  8px;
 
-  --shadow-card:  0 1px 2px rgba(19, 26, 36, .06);
-  --shadow-hover: 0 4px 12px rgba(19, 26, 36, .10);
-  --shadow-pop:   0 8px 28px rgba(19, 26, 36, .14);
+  /* Elevation ramp. Layered, low-alpha shadows read as real depth rather than
+     a grey halo. Cards pair a hairline border WITH a soft shadow (the
+     Stripe/Linear look): the border defines the edge, the shadow lifts it. */
+  --shadow-xs:    0 1px 2px rgba(18, 25, 38, .05);
+  --shadow-card:  0 1px 2px rgba(18, 25, 38, .04), 0 2px 6px rgba(18, 25, 38, .05);
+  --shadow-hover: 0 4px 16px rgba(18, 25, 38, .10);
+  --shadow-pop:   0 12px 34px rgba(18, 25, 38, .16);
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -80,12 +97,18 @@
   }
 
   body {
-    background: var(--color-surface-2);
+    /* A whisper of light at the top gives the app a horizon and lets cards sit
+       on it, without introducing any meaningful colour. */
+    background:
+      radial-gradient(1100px 380px at 50% -140px, #FFFFFF 0%, rgba(255, 255, 255, 0) 72%),
+      var(--color-surface-2);
+    background-attachment: fixed;
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   /**
@@ -133,11 +156,28 @@
     box-shadow: var(--shadow-card);
   }
 
-  /** docs/04_App_UI.md §3: the type scale, as classes. */
-  .t-display { font-size: 28px; font-weight: 600; line-height: 1.25; }
-  .t-h1      { font-size: 22px; font-weight: 600; line-height: 1.3; }
-  .t-h2      { font-size: 17px; font-weight: 600; line-height: 1.35; }
-  .t-h3      { font-size: 15px; font-weight: 600; line-height: 1.4; }
+  /**
+   * A card that is itself a link or button. Lifts on hover so it reads as
+   * clickable. Motion is disabled under prefers-reduced-motion (base layer).
+   */
+  .hover-lift {
+    transition: box-shadow .16s ease, transform .16s ease, border-color .16s ease;
+  }
+  .hover-lift:hover {
+    box-shadow: var(--shadow-hover);
+    border-color: var(--color-line-strong);
+    transform: translateY(-1px);
+  }
+
+  /** The brand gradient as a fill, for the logo tile and brand chrome. */
+  .bg-brand-gradient { background: var(--gradient-brand); }
+
+  /** docs/04_App_UI.md §3: the type scale, as classes. Large sizes get negative
+      tracking, which is what makes headings read as composed rather than loose. */
+  .t-display { font-size: 30px; font-weight: 700; line-height: 1.18; letter-spacing: -0.021em; }
+  .t-h1      { font-size: 22px; font-weight: 600; line-height: 1.25; letter-spacing: -0.017em; }
+  .t-h2      { font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -0.011em; }
+  .t-h3      { font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: -0.006em; }
   .t-body    { font-size: 14px; font-weight: 400; line-height: 1.55; }
   .t-small   { font-size: 12.5px; font-weight: 400; line-height: 1.45; }
   .t-label   {

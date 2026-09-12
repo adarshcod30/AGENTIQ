@@ -247,6 +247,8 @@ export interface Project {
   lastDiscoveryAt: string | null;
   /** Names only of the opt-in runtime env; values never leave the server. */
   runtimeEnvKeys?: string[];
+  /** Optional npm script that starts the app under test (not a secret). */
+  startScript?: string | null;
   createdAt: string;
   updatedAt: string;
 }

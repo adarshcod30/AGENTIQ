@@ -26,6 +26,7 @@ import { apiGet } from '@/services/api';
 import { VerifyBanner } from './VerifyBanner';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui';
+import { Wordmark } from '@/components/Brand';
 import type { HealthStatus } from '@/types';
 
 const WORK = [
@@ -62,7 +63,7 @@ function NavGroup({ title, items, onNavigate }: {
           <NavLink
             key={to} to={to} onClick={onNavigate}
             className={({ isActive }) => cn(
-              'flex items-center gap-2.5 rounded-[6px] px-2 py-1.5 text-[13px] transition-colors',
+              'flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-[13px] transition-colors',
               // Active: primary-50 fill, 2px primary left rule, primary text (§5).
               isActive
                 ? 'border-l-2 border-primary bg-primary-50 pl-1.5 font-medium text-primary'
@@ -129,11 +130,8 @@ export function Shell() {
           drawerOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-14 items-center gap-2 border-b border-line px-4">
-          <div className="grid size-6 place-items-center rounded-[4px] bg-primary text-[11px] font-bold text-white">
-            A
-          </div>
-          <span className="font-semibold tracking-tight">AGENTIQ</span>
+        <div className="flex h-14 items-center border-b border-line px-4">
+          <Wordmark markSize={26} />
         </div>
 
         <div className="flex-1 overflow-y-auto py-2">
@@ -158,7 +156,7 @@ export function Shell() {
       )}
 
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-surface/70 sm:px-6">
           <button
             type="button"
             className="rounded p-1 text-ink-muted hover:bg-surface-2 lg:hidden"

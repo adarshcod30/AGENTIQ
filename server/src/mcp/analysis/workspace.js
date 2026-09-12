@@ -24,12 +24,20 @@ export const SOURCE_EXTS = new Set([
 /**
  * Walks the workspace, returning workspace-relative paths for files that match.
  *
+ * A file is kept when its extension is in `exts` OR its basename satisfies
+ * `matchName`. The name matcher is not a nicety: path.extname('.env') is '',
+ * because Node treats a leading dot as a hidden-file marker rather than an
+ * extension, so an extension filter alone silently skips the canonical secret
+ * files (.env, .env.production, id_rsa). matchName is how a secret scan reaches
+ * exactly those.
+ *
  * @param jail        a jail from createJail (its root is the traversal root)
  * @param maxFiles    stop after this many matches (default 5000)
- * @param exts        only return files with these extensions (default SOURCE_EXTS)
- * @param filter      optional (relPath) => boolean applied after the ext filter
+ * @param exts        keep files with these extensions (default SOURCE_EXTS; null = any)
+ * @param matchName   optional (basename) => boolean, ORed with the ext check
+ * @param filter      optional (relPath) => boolean applied after the match
  */
-export function walkWorkspace(jail, { maxFiles = 5000, exts = SOURCE_EXTS, filter = null } = {}) {
+export function walkWorkspace(jail, { maxFiles = 5000, exts = SOURCE_EXTS, matchName = null, filter = null } = {}) {
   const out = [];
   const stack = [''];
 
@@ -48,7 +56,9 @@ export function walkWorkspace(jail, { maxFiles = 5000, exts = SOURCE_EXTS, filte
         continue;
       }
       if (!entry.isFile()) continue; // skip symlinks, sockets, devices
-      if (exts && !exts.has(path.extname(entry.name))) continue;
+      const extOk = exts ? exts.has(path.extname(entry.name)) : true;
+      const nameOk = matchName ? matchName(entry.name) : false;
+      if (!extOk && !nameOk) continue;
       if (filter && !filter(rel)) continue;
       out.push(rel);
       if (out.length >= maxFiles) break;
@@ -62,8 +72,8 @@ export function walkWorkspace(jail, { maxFiles = 5000, exts = SOURCE_EXTS, filte
  * on count and per-file size. Skips files that could not be read. Shared by the
  * static analysis tools, which all need the same "give me the source" step.
  */
-export function collectWorkspaceFiles(jail, { maxFiles = 5000, exts = SOURCE_EXTS, maxBytes = 512 * 1024 } = {}) {
-  const { files, truncated } = walkWorkspace(jail, { maxFiles, exts });
+export function collectWorkspaceFiles(jail, { maxFiles = 5000, exts = SOURCE_EXTS, maxBytes = 512 * 1024, matchName = null } = {}) {
+  const { files, truncated } = walkWorkspace(jail, { maxFiles, exts, matchName });
   const out = [];
   for (const rel of files) {
     const content = readTextInJail(jail, rel, maxBytes);

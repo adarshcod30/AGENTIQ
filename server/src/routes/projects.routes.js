@@ -51,15 +51,24 @@ router.get('/', protectRoute, async (req, res) => {
   return ok(res, { projects: projects.map((p) => ({ id: p._id, ...p })) });
 });
 
-/** Set (or clear) the opt-in runtime env for the app under test. Owner-scoped. */
+/** The npm script that starts the app under test. A name, never a shell command. */
+const startScriptSchema = z.string().trim().max(60).optional();
+
+/**
+ * Update the opt-in runtime config for the app under test: its environment and
+ * the start script. Owner-scoped. A field left out is left unchanged, so the UI
+ * can save the env without clearing the start script.
+ */
 router.patch('/:id/env', protectRoute, async (req, res) => {
-  const parsed = z.object({ runtimeEnv: runtimeEnvSchema }).safeParse(req.body ?? {});
+  const parsed = z.object({ runtimeEnv: runtimeEnvSchema, startScript: startScriptSchema })
+    .safeParse(req.body ?? {});
   if (!parsed.success) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Provide runtimeEnv as a map of string keys to string values');
+    return fail(res, 400, 'VALIDATION_ERROR', 'Provide runtimeEnv as a map of string keys to string values, and startScript as a script name');
   }
   try {
     const result = await updateProjectEnv({
-      userId: req.user._id, projectId: req.params.id, runtimeEnv: parsed.data.runtimeEnv ?? {},
+      userId: req.user._id, projectId: req.params.id,
+      runtimeEnv: parsed.data.runtimeEnv, startScript: parsed.data.startScript,
     });
     return ok(res, result);
   } catch (err) {

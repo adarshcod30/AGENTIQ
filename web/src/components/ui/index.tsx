@@ -41,8 +41,9 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-[6px] font-medium',
-        'transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center justify-center gap-2 rounded-[8px] font-medium',
+        'transition-all duration-150 active:translate-y-[0.5px]',
+        'disabled:cursor-not-allowed disabled:opacity-60 disabled:active:translate-y-0',
         BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className,
       )}
       {...rest}
@@ -117,9 +118,10 @@ export function KpiCard({
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
 
 const FIELD_BASE =
-  'w-full h-9 rounded-[6px] border border-line bg-surface px-3 text-sm text-ink ' +
-  'placeholder:text-ink-subtle focus:border-accent focus:outline-none ' +
-  'focus:ring-2 focus:ring-accent/30 disabled:bg-surface-3';
+  'w-full h-9 rounded-[8px] border border-line bg-surface px-3 text-sm text-ink ' +
+  'placeholder:text-ink-subtle transition-colors hover:border-line-strong ' +
+  'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 ' +
+  'disabled:bg-surface-3 disabled:hover:border-line';
 
 export function Field({
   label, hint, error, required, children, htmlFor,
@@ -176,6 +178,47 @@ export function Checkbox({ label, hint, id, ...rest }: ComponentProps<'input'> &
         {hint && <p className="t-small text-ink-muted">{hint}</p>}
       </div>
     </div>
+  );
+}
+
+/* ── Switch ───────────────────────────────────────────────────────────────── */
+
+/**
+ * An accessible on/off toggle (role="switch"), where "on" typically reveals
+ * more UI. One button carries the track AND the text, so the label is the
+ * control's accessible name and the whole row is the hit target.
+ */
+export function Switch({ checked, onChange, label, hint, id }: {
+  checked: boolean; onChange: (v: boolean) => void; label?: string; hint?: string; id?: string;
+}) {
+  return (
+    <button
+      type="button" role="switch" aria-checked={checked} id={id}
+      aria-label={label ? undefined : 'Toggle'}
+      onClick={() => onChange(!checked)}
+      className="flex items-start gap-3 text-left"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors',
+          checked ? 'bg-primary' : 'border border-line bg-surface-3',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-0.5 block size-4 rounded-full bg-white shadow-[var(--shadow-xs)] transition-transform',
+            checked ? 'translate-x-4' : 'translate-x-0.5',
+          )}
+        />
+      </span>
+      {label && (
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium text-ink">{label}</span>
+          {hint && <span className="t-small mt-0.5 block text-ink-muted">{hint}</span>}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -244,7 +287,7 @@ export function CodeBlock({ code, label, maxHeight = 400 }: {
 }) {
   const copy = () => navigator.clipboard?.writeText(code);
   return (
-    <div className="overflow-hidden rounded-[6px] border border-line bg-surface-3">
+    <div className="overflow-hidden rounded-[8px] border border-line bg-surface-3">
       <div className="flex items-center justify-between border-b border-line px-3 py-1.5">
         <span className="t-label">{label ?? 'Output'}</span>
         <button
@@ -395,7 +438,7 @@ export function Modal({ open, onClose, title, children, footer }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
       <div
         ref={ref} role="dialog" aria-modal="true" aria-label={title}
-        className="w-full max-w-lg rounded-[8px] bg-surface"
+        className="w-full max-w-lg rounded-[10px] bg-surface"
         style={{ boxShadow: 'var(--shadow-pop)' }}
       >
         <div className="border-b border-line px-5 py-4">
