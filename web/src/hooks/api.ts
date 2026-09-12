@@ -294,6 +294,17 @@ export function useUpdateProjectEnv() {
   });
 }
 
+/** Load a project's runtime env from its own .env file. The server reads the
+ *  file through the jail; only the key names come back, never the values. */
+export function useImportProjectEnv() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string }) =>
+      apiPost<{ id: string; runtimeEnvKeys: string[]; imported: number }>(`/projects/${vars.id}/env/from-file`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}
+
 export const useAssessments = (projectId?: string) => useQuery({
   queryKey: ['assessments', { projectId: projectId ?? null }],
   queryFn: () => apiGet<{ assessments: Assessment[] }>('/assessments', projectId ? { projectId } : undefined),

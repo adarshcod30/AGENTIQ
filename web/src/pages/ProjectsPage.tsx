@@ -10,9 +10,10 @@
  */
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FolderPlus, Play, FolderGit2, Clock, KeyRound } from 'lucide-react';
+import { FolderPlus, Play, FolderGit2, Clock, KeyRound, FileDown } from 'lucide-react';
 import {
-  useProjects, useCreateProject, useUpdateProjectEnv, useAssessments, useCreateAssessment,
+  useProjects, useCreateProject, useUpdateProjectEnv, useImportProjectEnv,
+  useAssessments, useCreateAssessment,
 } from '@/hooks/api';
 import {
   Card, CardHeader, CardBody, Button, Field, Input, Textarea, Alert, Chip, EmptyState, SkeletonRows,
@@ -48,6 +49,7 @@ export function ProjectsPage() {
   const projects = useProjects();
   const create = useCreateProject();
   const updateEnv = useUpdateProjectEnv();
+  const importEnv = useImportProjectEnv();
   const runAssessment = useCreateAssessment();
   const recent = useAssessments();
 
@@ -90,6 +92,17 @@ export function ProjectsPage() {
       setEditEnvText('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save the environment.');
+    }
+  };
+
+  const loadFromFile = async (projectId: string) => {
+    setError(null);
+    try {
+      await importEnv.mutateAsync({ id: projectId });
+      setEditEnvFor(null);
+      setEditEnvText('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not read the project .env file.');
     }
   };
 
@@ -214,9 +227,20 @@ export function ProjectsPage() {
                   <p className="t-small mt-2 text-danger">Clone failed: {p.cloneError}</p>
                 )}
                 {editEnvFor === p.id && (
-                  <div className="mt-3 space-y-2 rounded-[6px] border border-line bg-surface-2 p-3">
+                  <div className="mt-3 space-y-3 rounded-[6px] border border-line bg-surface-2 p-3">
+                    {p.workspaceRoot && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="secondary" loading={importEnv.isPending}
+                          onClick={() => void loadFromFile(p.id)}>
+                          <FileDown size={14} aria-hidden /> Load from project's .env
+                        </Button>
+                        <span className="t-small text-ink-subtle">
+                          Reads the .env in the project folder on the server. The values are stored, never shown here.
+                        </span>
+                      </div>
+                    )}
                     <p className="t-small text-ink-muted">
-                      Runtime environment the app needs to start, KEY=VALUE per line. Stored locally, never sent back to the browser.
+                      Or set them by hand, KEY=VALUE per line. Stored locally, never sent back to the browser.
                       {p.runtimeEnvKeys && p.runtimeEnvKeys.length > 0 && (
                         <> Currently set: <span className="t-mono">{p.runtimeEnvKeys.join(', ')}</span>. Re-enter all values to replace, or save empty to clear.</>
                       )}

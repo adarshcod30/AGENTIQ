@@ -14,6 +14,7 @@ import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
 import { cloneRepo, normalizeGithubUrl, GitError } from './git.service.js';
 import { cloneQueue } from '../lib/jobQueue.js';
+import { readTextInJail } from '../mcp/analysis/workspace.js';
 import { getTool } from '../mcp/registry.js';
 import { runDiscoveryAgent } from '../agents/discovery.agent.js';
 import { Project } from '../models/Project.js';
@@ -150,6 +151,54 @@ export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScr
     id: project._id, runtimeEnvKeys: keys,
     startScript: project.startScript ?? null, targetUrl: project.targetUrl ?? null,
   };
+}
+
+/** KEY=VALUE per line -> object. Blank lines and #comments ignored; surrounding
+ *  quotes stripped. Mirrors the frontend parser and dotenv's basic behaviour. */
+function parseDotenv(text) {
+  const out = {};
+  for (const line of String(text).split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const i = t.indexOf('=');
+    if (i <= 0) continue;
+    let v = t.slice(i + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    out[t.slice(0, i).trim()] = v;
+  }
+  return out;
+}
+
+/** Only env files may be imported, never an arbitrary path. */
+const ENV_FILE_RE = /^\.env(\.[\w.-]+)?$/;
+
+/**
+ * Reads the project's own .env file from its workspace and stores it as the
+ * runtime env, so the user does not retype it (the "access" toggle in the UI).
+ * The file is read THROUGH the jail, so it must sit inside the workspace, and the
+ * values are stored server-side exactly like a hand-entered env: they never
+ * travel back to the browser. Only a `.env` (or `.env.<name>`) file is allowed.
+ */
+export async function importEnvFromFile({ userId, projectId, file = '.env' }) {
+  if (!ENV_FILE_RE.test(file)) throw new DiscoveryError('Only a .env file can be imported', 'BAD_ENV_FILE', 400);
+  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
+  if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
+  if (!project.workspaceRoot) {
+    throw new DiscoveryError('This project has no local folder to read a .env from', 'NO_SOURCE', 400);
+  }
+  let jail;
+  try {
+    jail = createJail(project.workspaceRoot);
+  } catch {
+    throw new DiscoveryError(`The project workspace is no longer available: ${project.workspaceRoot}`, 'WORKSPACE_GONE', 409);
+  }
+  const text = readTextInJail(jail, file, 256 * 1024);
+  if (text === null) throw new DiscoveryError(`No ${file} file found in the project folder`, 'ENV_FILE_NOT_FOUND', 404);
+  const parsed = parseDotenv(text);
+  if (Object.keys(parsed).length === 0) throw new DiscoveryError(`${file} has no KEY=VALUE lines`, 'ENV_FILE_EMPTY', 400);
+  project.runtimeEnv = parsed;
+  await project.save();
+  return { id: project._id, runtimeEnvKeys: Object.keys(parsed), imported: Object.keys(parsed).length, file };
 }
 
 /** The tool runner, carrying the project workspace so fs tools stay in the jail. */

@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 import {
-  createProject, updateProjectEnv, discoverProject, listProjects, getProject, DiscoveryError,
+  createProject, updateProjectEnv, importEnvFromFile, discoverProject, listProjects, getProject, DiscoveryError,
 } from '../services/discovery.service.js';
 
 const router = Router();
@@ -80,6 +80,21 @@ router.patch('/:id/env', protectRoute, async (req, res) => {
       userId: req.user._id, projectId: req.params.id,
       runtimeEnv: parsed.data.runtimeEnv, startScript: parsed.data.startScript, targetUrl: parsed.data.targetUrl,
     });
+    return ok(res, result);
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+/**
+ * Load the runtime env from the project's own .env file instead of typing it.
+ * Owner-scoped, read through the jail, values stored server-side and never
+ * returned. The "access" toggle in the UI hits this.
+ */
+router.post('/:id/env/from-file', protectRoute, async (req, res) => {
+  const file = typeof req.body?.file === 'string' && req.body.file.trim() ? req.body.file.trim() : '.env';
+  try {
+    const result = await importEnvFromFile({ userId: req.user._id, projectId: req.params.id, file });
     return ok(res, result);
   } catch (err) {
     return sendError(res, err);
