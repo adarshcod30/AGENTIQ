@@ -17,9 +17,11 @@
 ---
 
 Paste an API URL and a sentence describing what the endpoint should do. AGENTIQ generates test
-cases with an LLM, **executes** them, runs a six-family OWASP security scan, and can deploy a
-repository and re-test the URL that goes live. None of that is new on its own. What is different
-is the rule underneath it: **an agent never touches the network itself.** Every request goes
+cases with an LLM, **executes** them, and runs a six-family OWASP security scan. Point it at a whole
+project instead, a local folder, a GitHub repo, or a deployed URL, and it discovers the routes,
+tests them, scans them, and judges whether the project is ready to deploy, then deploys it to your
+own Render or Vercel and re-tests the URL that goes live. None of that is new on its own. What is
+different is the rule underneath it: **an agent never touches the network itself.** Every request goes
 through a registered [MCP](https://modelcontextprotocol.io) tool that validates its input,
 checks your permission for that host, refuses private and cloud-metadata addresses, and writes an
 append-only audit record. You can open the Audit Log and see exactly what the AI did, and why it
@@ -70,9 +72,10 @@ The third problem is the one AGENTIQ is built around.
 | **Security Agent** | Six probe families mapped to the OWASP API Security Top 10 (2023): SQL injection, reflected XSS, broken authentication, CORS, security headers, rate limiting. Every finding carries its payload, the signal that fired, and the baseline it deviated from. |
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
 | **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
-| **Deployment Agent** | Read-only preflight against GitHub, a Render deploy, then an automatic test and scan of the live URL, all recorded together. |
-| **Autonomous assessment** | Register a project as a local folder, a public GitHub repo (cloned and statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
-| **Live testing** | When an app needs environment variables to boot, provide them (stored server-side, never returned) and re-run, so its endpoints are tested against the running app. A deployed URL or a cloned repo is never sent test writes. |
+| **Deployment Agent** | Read-only preflight against GitHub, then a deploy to **Render or Vercel using the user's own connected account**, then an automatic test and scan of the live URL, all recorded together. |
+| **Autonomous assessment** | Register a project as a local folder, a public or private GitHub repo (shallow-cloned in the background, statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
+| **Bring your own accounts** | Multi-tenant. Each user connects their own GitHub, Render and Vercel from the UI, by OAuth or a pasted token, encrypted at rest and never returned. Private repos clone with the user's token, and deploys go to the user's own account, no shared platform key. |
+| **Live testing** | When an app needs environment variables to boot, provide them by hand or **load them from the project's own `.env`** (stored server-side, never returned) and re-run, so its endpoints are tested against the running app. A deployed URL or a cloned repo is never sent test writes. |
 | **Trust pages** | A Tool Registry that renders live JSON Schemas from the server, and an Audit Log where denied and SSRF-blocked calls stand out. |
 | **Real dashboard** | Every figure is a MongoDB aggregation over your own runs. A new account shows honest zeros. |
 | **Evaluation harness** | `npm run evaluate` measures precision and recall on labelled fixture apps, a mutation score for generated suites, and a grounding ablation. |
@@ -155,7 +158,7 @@ flowchart LR
     AG -- "tool calls only" --> REG
     REG --> PERM --> EG
     EG -- "guarded HTTP" --> TGT["Target APIs<br/>user-nominated"]
-    EG --> EXTAPI["GitHub and Render APIs"]
+    EG --> EXTAPI["GitHub, Render and Vercel APIs<br/>with the user's own token"]
     REG --> AUD
     SV --> LLM["LLM chain<br/>Bedrock Nova, then Groq"]
     SV --> DB[("MongoDB")]
@@ -202,6 +205,27 @@ Every terminal state is stored, including failures: a run that could not generat
 recorded as `GEN_FAILED` with the reason, never replaced by fabricated tests. The full state
 machine is in [docs/03_App_Flow.md](docs/03_App_Flow.md).
 
+### Assessing a whole project
+
+A single run tests one endpoint; an **assessment** takes a whole project end to end. Register it as
+a local folder, a public or private GitHub repo, or a deployed URL, and AGENTIQ walks a persisted
+state machine: **discover** the routes from the source (an AST pass, no LLM), **test** every
+endpoint (it starts the app in the process sandbox, or targets the deployed URL, or, for a cloned
+repo, runs static-only because that code is untrusted), **scan** with the six probe families plus
+static secret, SAST, dependency and config analysis, then **judge readiness** and assemble a report
+with prioritised guidance: for each finding, why it matters, how to fix it, and concrete tips. A
+GitHub repo clones in the background, so the request never blocks: the project shows a live
+`cloning` status and flips to `ready` on its own. If the app cannot boot because it needs
+environment variables, provide them (by hand or from the project's own `.env`) and re-run.
+
+### Bring your own accounts
+
+AGENTIQ is multi-tenant: it never deploys with a shared key or clones a private repo with a platform
+token. Each user connects their **own** GitHub, Render and Vercel in Settings, either by OAuth
+("Connect with GitHub") or by pasting a personal token. The token is encrypted at rest and used only
+server-side, for that user's private clones and their deploys to their own hosting. The API only
+ever reports which providers are connected and the last four characters, never a token.
+
 ## The security model
 
 A tool that fetches URLs a user typed is an SSRF engine unless something stops it. AGENTIQ stops it
@@ -231,6 +255,15 @@ per host.
 **3. The audit log.** Every call writes one record: tool, risk class, host, a SHA-256 of the input
 (never the raw payload, which may hold credentials), outcome and duration. There is no update or
 delete path in the API, and the schema refuses updates too.
+
+**4. The filesystem jail, untrusted code, and credentials at rest.** Reading a project's files is
+bounded by a jail (`server/src/mcp/fsJail.js`), the exact analogue of the egress guard: the resolved
+real path, symlinks followed, must sit inside the workspace, so a tool asked for
+`../../.aws/credentials` is refused. A GitHub repo is cloned as **untrusted** code (`trusted: false`)
+and statically scanned, but its app is never started, so none of its scripts run. And every
+third-party token a user connects is encrypted at rest with **AES-256-GCM** (a random IV and auth
+tag, key derived from `JWT_SECRET`), stored `select:false`, decrypted only server-side for a deploy
+or a private clone, and never returned to the browser.
 
 The rule that agents contain no I/O is not left to discipline. `server/tests/architecture.test.js`
 fails the build if an HTTP client or process API appears in the agents, routes or controllers.
@@ -325,14 +358,16 @@ and [docs/07_DEPLOYMENT_CHECKLIST.md](docs/07_DEPLOYMENT_CHECKLIST.md).
 AGENTIQ/
 ├── server/                  Express API
 │   ├── src/
-│   │   ├── agents/          testing · security · deployment (no I/O)
-│   │   ├── mcp/             registry · permissions · audit · egress guard · IP rules
+│   │   ├── agents/          testing · security · deployment · discovery · intent (no I/O)
+│   │   ├── mcp/             registry · permissions · audit · egress guard · fs jail · IP rules
 │   │   │   ├── tools/       one file per MCP tool
+│   │   │   ├── analysis/    secret · SAST · config · dependency · route discovery
 │   │   │   └── probes/      baseline differential · database error fingerprints
-│   │   ├── services/        run orchestration · LLM · specs · stats · deployment · mail
-│   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · EmailVerification
+│   │   ├── deploy/          provider registry · render · vercel · railway
+│   │   ├── services/        run · assessment · discovery · git · connections · oauth · crypto · deployment · LLM · stats
+│   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · Project · Discovery · Assessment · Connection · Grant
 │   │   ├── routes/  controllers/  middleware/  config/  lib/  utils/
-│   └── tests/               441 tests
+│   └── tests/               626 tests
 ├── web/                     React SPA
 │   └── src/                 pages · components · hooks · services · store · types
 ├── fixtures/                vulnerable-api and hardened-api, with a shared contract test
@@ -356,7 +391,9 @@ missing, and exits if a required one is absent. Only two are required.
 | `GROQ_API_KEY` | | The Groq provider |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Google sign-in; the server boots without them |
 | `MAIL_DRIVER`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` | | Verification email |
-| `RENDER_API_KEY` | | The Deployment Agent |
+| `RENDER_API_KEY` | | Platform-default Render deploys, a fallback; each user connects their own |
+| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET` | | "Connect with GitHub" OAuth; token paste works without it |
+| `VERCEL_CLIENT_ID`, `VERCEL_CLIENT_SECRET` | | "Connect with Vercel" OAuth; token paste works without it |
 | `ALLOW_PRIVATE_TARGETS` | | Local fixtures only; refused in production |
 
 AWS credentials never go in `.env`: the SDK uses its default credential chain. The full list is in
@@ -377,6 +414,9 @@ Every response uses one envelope: `{ success: true, data }` or
 | `POST` | `/api/security/scan` | Security scan only |
 | `POST` | `/api/specs/import` | Import an OpenAPI document |
 | `POST` | `/api/deployments/preflight` · `/api/deployments` | Check, then deploy and verify |
+| `POST` `GET` | `/api/projects` | Register a project (folder, deployed URL, or GitHub repo) and list |
+| `POST` `GET` | `/api/assessments` · `/api/assessments/:id` | Run and read an autonomous assessment |
+| `GET` `PUT` `DELETE` | `/api/connections` · `/api/connections/:provider` | Your own GitHub/Render/Vercel tokens; presence out only |
 | `GET` | `/api/mcp/tools` | The live tool registry with JSON Schemas (public) |
 | `GET` | `/api/mcp/audit` | The audit log |
 | `GET` | `/api/health` | Liveness, database and LLM chain (public) |
@@ -405,7 +445,7 @@ Every endpoint, with its purpose and auth requirement: [docs/02_TRD.md](docs/02_
 ## Testing
 
 ```bash
-npm test                                   # 441 server tests and 24 fixture contract tests
+npm test                                   # 626 server tests and 24 fixture contract tests
 npm --workspace server run test:coverage   # enforces 70% on src/mcp and src/agents
 npm run lint
 npm run typecheck
@@ -431,6 +471,10 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
   when calls fall back to Groq.
 - **Detection only.** No exploitation, and no model of business logic, so logic flaws are out of
   reach.
+- **Live deploys need the user's own token to prove out.** Render is fully wired and tested against a
+  fake control plane; Vercel's provider is coded against Vercel's API and tested the same way, so a
+  first real Vercel deploy may need a small request-shape tweak. OAuth "Connect" needs an OAuth app
+  registered on the provider, and Render has no such flow, so Render is token paste only.
 - Not handled yet: an idempotency key on run submission, a per-user concurrent-run limit, and
   paging through very long operation lists.
 - The frontend is type-checked and built in CI but has no unit tests.
@@ -438,7 +482,11 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
 ## Roadmap
 
 - [ ] Deploy to App Runner and S3 + CloudFront behind an OIDC pipeline
+- [x] Assess a whole project: a local folder, a public or private GitHub repo (background clone), or a deployed URL
+- [x] Multi-tenant: connect your own GitHub, Render and Vercel (encrypted at rest), by OAuth or token
+- [x] Deploy to Vercel, not just Render, using the user's own account
 - [x] Persist permission grants so they survive restarts (done); sharing live grants across scaled instances remains
+- [ ] Render OAuth (no general OAuth-token flow today, so Render stays token paste)
 - [ ] Teach generation to assert on types, content types and boundaries
 - [ ] Grow the benchmark (more endpoints, more repeats) to settle the grounding result
 - [ ] A health check that verifies provider credentials, not just configuration
