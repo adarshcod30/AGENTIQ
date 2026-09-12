@@ -143,7 +143,7 @@ async function phaseDiscoverUrlOnly(assessment, project) {
   return model;
 }
 
-async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null, targetUrl = null }) {
+async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null, targetUrl = null, trusted = true }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
 
   // A deployed target: never start anything locally, and never run the functional
@@ -165,6 +165,24 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
       assessment.endpoints.push({
         method: endpoint.method, path: endpoint.path, intent: null, confidence: null,
         status: 'skipped', note: 'live deployment', passed: 0, failed: 0, errored: 0,
+      });
+    }
+    await assessment.save();
+    return { paused: false };
+  }
+
+  // Untrusted code (a cloned repo): never start it, so its scripts never run.
+  // Discovery and the static scans still ran; with no running app there are no
+  // live tests, and that is the safe, intended behaviour for code we did not write.
+  if (!trusted) {
+    assessment.security.notes.push(
+      'This project was cloned from a repository (untrusted code), so its app was not started and none '
+      + 'of its scripts were run. Discovery and the static security scans ran against the source.',
+    );
+    for (const endpoint of (model.endpoints ?? []).slice(0, MAX_ENDPOINTS)) {
+      assessment.endpoints.push({
+        method: endpoint.method, path: endpoint.path, intent: null, confidence: null,
+        status: 'skipped', note: 'untrusted source', passed: 0, failed: 0, errored: 0,
       });
     }
     await assessment.save();
@@ -300,6 +318,8 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
   const startScript = project.startScript ?? null;
   const targetUrl = project.targetUrl ?? null;
   const hasSource = Boolean(project.workspaceRoot);
+  // Cloned repos are untrusted: their scripts must never run, so the app is not started.
+  const trusted = project.trusted !== false;
 
   // A source folder means a filesystem jail. A URL-only project has none, and the
   // fs tools are simply never reached on that path (discovery and static scans are
@@ -328,7 +348,7 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
         : await phaseDiscoverUrlOnly(assessment, project);
     }
     if (before(assessment.state, S.SCANNING)) {
-      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv, startScript, targetUrl });
+      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv, startScript, targetUrl, trusted });
       if (paused) return assessment; // waits for an answer
     }
     if (before(assessment.state, S.ANALYZING)) await phaseScan(assessment, model, ctx, deps, { runStatic: hasSource });

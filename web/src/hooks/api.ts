@@ -263,7 +263,7 @@ export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: {
-      name: string; workspaceRoot?: string; targetUrl?: string;
+      name: string; workspaceRoot?: string; targetUrl?: string; repoUrl?: string;
       runtimeEnv?: Record<string, string>; startScript?: string;
     }) => apiPost<{ project: Project }>('/projects', input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),

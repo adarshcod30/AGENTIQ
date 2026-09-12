@@ -12,6 +12,7 @@
  */
 import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
+import { cloneRepo, GitError } from './git.service.js';
 import { getTool } from '../mcp/registry.js';
 import { runDiscoveryAgent } from '../agents/discovery.agent.js';
 import { Project } from '../models/Project.js';
@@ -33,13 +34,27 @@ export class DiscoveryError extends Error {
  * its canonical realpath, which is what we store, so later tool calls are bound
  * to a root that cannot move under a symlink.
  */
-export async function createProject({ userId, name, workspaceRoot, targetUrl, runtimeEnv, startScript }) {
+export async function createProject({ userId, name, workspaceRoot, targetUrl, repoUrl, runtimeEnv, startScript }) {
   let root;
+  let trusted = true;
+  let clonedFrom = null;
   if (workspaceRoot) {
     try {
       root = createJail(workspaceRoot).root;
     } catch (err) {
       if (err instanceof FsJailError) throw new DiscoveryError(err.message, 'INVALID_WORKSPACE', 400);
+      throw err;
+    }
+  } else if (repoUrl) {
+    // Clone the public repo into a jailed workspace. Cloned code is UNTRUSTED, so
+    // the project is marked trusted:false and the assessment never starts it.
+    try {
+      const cloned = await cloneRepo({ url: repoUrl });
+      root = cloned.path;
+      clonedFrom = cloned.repoUrl;
+      trusted = false;
+    } catch (err) {
+      if (err instanceof GitError) throw new DiscoveryError(err.message, err.code, 400);
       throw err;
     }
   }
@@ -55,13 +70,14 @@ export async function createProject({ userId, name, workspaceRoot, targetUrl, ru
     }
   }
   if (!root && !url) {
-    throw new DiscoveryError('Provide a project folder or a deployed URL', 'NO_TARGET', 400);
+    throw new DiscoveryError('Provide a project folder, a deployed URL, or a GitHub repo', 'NO_TARGET', 400);
   }
   const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
   return Project.create({
-    userId, name,
+    userId, name, trusted,
     ...(root ? { workspaceRoot: root } : {}),
     ...(url ? { targetUrl: url } : {}),
+    ...(clonedFrom ? { repoUrl: clonedFrom } : {}),
     ...(hasEnv ? { runtimeEnv } : {}),
     ...(startScript && startScript.trim() ? { startScript: startScript.trim() } : {}),
   });

@@ -54,6 +54,7 @@ export function ProjectsPage() {
   const [name, setName] = useState('');
   const [root, setRoot] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
   const [envText, setEnvText] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Which project's env editor is open, and its draft text.
@@ -68,11 +69,13 @@ export function ProjectsPage() {
         name: name.trim(),
         ...(root.trim() ? { workspaceRoot: root.trim() } : {}),
         ...(targetUrl.trim() ? { targetUrl: targetUrl.trim() } : {}),
+        ...(repoUrl.trim() ? { repoUrl: repoUrl.trim() } : {}),
         ...(Object.keys(runtimeEnv).length ? { runtimeEnv } : {}),
       });
       setName('');
       setRoot('');
       setTargetUrl('');
+      setRepoUrl('');
       setEnvText('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add the project.');
@@ -124,9 +127,9 @@ export function ProjectsPage() {
                 value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <p className="t-small text-ink-muted">
-              Point AGENTIQ at a local folder, a deployed URL, or both. A deployed URL tests the live
-              app and skips the local start; add a folder too and it also discovers routes and scans
-              the source.
+              Point AGENTIQ at a local folder, a deployed URL, a public GitHub repo, or a mix. A
+              deployed URL tests the live app; a GitHub repo is cloned and statically scanned, its
+              code is never run; a folder discovers routes and scans the source.
             </p>
             <Field label="Workspace path (folder)" htmlFor="proj-root"
               hint="An absolute path to the project folder on the server host. Optional if you give a deployed URL.">
@@ -138,12 +141,17 @@ export function ProjectsPage() {
               <Input id="proj-url" mono placeholder="https://my-app.vercel.app"
                 value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} />
             </Field>
+            <Field label="GitHub repository (optional)" htmlFor="proj-repo"
+              hint="A public repo, e.g. https://github.com/owner/repo. AGENTIQ clones it and runs discovery and the static security scans. It never runs the cloned code.">
+              <Input id="proj-repo" mono placeholder="https://github.com/owner/repo"
+                value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} />
+            </Field>
             <Field label="Runtime environment (optional)" htmlFor="proj-env"
               hint="KEY=VALUE per line. Only if the app needs it to start (a database URL, a secret). Stored locally on the server, never sent back to the browser. Cannot override PORT.">
               <Textarea id="proj-env" mono rows={3} placeholder={'MONGO_URI=mongodb://localhost:27017/app\nJWT_SECRET=…'}
                 value={envText} onChange={(e) => setEnvText(e.target.value)} />
             </Field>
-            <Button type="submit" loading={create.isPending} disabled={!name.trim() || (!root.trim() && !targetUrl.trim())}>
+            <Button type="submit" loading={create.isPending} disabled={!name.trim() || (!root.trim() && !targetUrl.trim() && !repoUrl.trim())}>
               <FolderPlus size={16} aria-hidden /> Add project
             </Button>
           </form>
@@ -167,8 +175,11 @@ export function ProjectsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-medium text-ink">{p.name}</p>
-                    <p className="t-mono truncate text-[12px] text-ink-muted">{p.workspaceRoot ?? p.targetUrl}</p>
+                    <p className="t-mono truncate text-[12px] text-ink-muted">{p.repoUrl ?? p.workspaceRoot ?? p.targetUrl}</p>
                   </div>
+                  {p.repoUrl && (
+                    <Chip className="bg-surface-3 text-ink-muted">github</Chip>
+                  )}
                   {p.targetUrl && (
                     <Chip className="bg-info-50 text-info">deployed</Chip>
                   )}

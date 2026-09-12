@@ -21,15 +21,18 @@ const runtimeEnvSchema = z.record(z.string(), z.string()).optional();
 const startScriptSchema = z.string().trim().max(60).optional();
 /** A deployed base URL to assess, instead of or alongside a local folder. */
 const targetUrlSchema = z.string().trim().url({ error: 'Enter a full http(s) URL' }).optional();
+/** A public GitHub repo URL to clone and assess (the service checks the host). */
+const repoUrlSchema = z.string().trim().url({ error: 'Enter a full GitHub repo URL' }).optional();
 
 const createSchema = z.object({
   name: z.string().trim().min(1, { error: 'A project name is required' }).max(120),
   workspaceRoot: z.string().trim().min(1).optional(),
   targetUrl: targetUrlSchema,
+  repoUrl: repoUrlSchema,
   runtimeEnv: runtimeEnvSchema,
   startScript: startScriptSchema,
-}).refine((d) => d.workspaceRoot || d.targetUrl, {
-  error: 'Provide a project folder path or a deployed URL',
+}).refine((d) => d.workspaceRoot || d.targetUrl || d.repoUrl, {
+  error: 'Provide a project folder path, a deployed URL, or a GitHub repo',
   path: ['workspaceRoot'],
 });
 

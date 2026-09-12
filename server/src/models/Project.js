@@ -53,6 +53,17 @@ const projectSchema = new mongoose.Schema({
    * runtimeEnv it is returned to the UI.
    */
   startScript: { type: String, default: undefined, trim: true, maxlength: 60 },
+
+  /** If the workspace was cloned from GitHub, the source repo URL (for display). */
+  repoUrl: { type: String, default: undefined, trim: true },
+
+  /**
+   * Whether the code in the workspace is the user's own (true) or was pulled from
+   * an external source such as a cloned GitHub repo (false). An untrusted project
+   * is never started, so its scripts never run: it gets discovery and the static
+   * scans only. Defaults true for a folder the user pointed at themselves.
+   */
+  trusted: { type: Boolean, default: true },
 }, { timestamps: true });
 
 projectSchema.index({ userId: 1, createdAt: -1 });
@@ -66,12 +77,16 @@ projectSchema.pre('validate', function requireTarget() {
 
 /** Never leak internals the client does not need. */
 projectSchema.methods.toJSON = function toJSON() {
-  const { _id, name, workspaceRoot, targetUrl, startScript, lastDiscoveryAt, createdAt, updatedAt } = this;
+  const {
+    _id, name, workspaceRoot, targetUrl, repoUrl, trusted, startScript, lastDiscoveryAt, createdAt, updatedAt,
+  } = this;
   return {
     id: _id,
     name,
     workspaceRoot: workspaceRoot ?? null,
     targetUrl: targetUrl ?? null,
+    repoUrl: repoUrl ?? null,
+    trusted: trusted !== false,
     startScript: startScript ?? null,
     lastDiscoveryAt,
     createdAt,

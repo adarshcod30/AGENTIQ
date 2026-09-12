@@ -247,6 +247,10 @@ export interface Project {
   workspaceRoot: string | null;
   /** Deployed base URL to assess. Null for a folder-only project. */
   targetUrl?: string | null;
+  /** Source GitHub repo, when the workspace was cloned from one. */
+  repoUrl?: string | null;
+  /** False when the code is external (a cloned repo): it is never started. */
+  trusted?: boolean;
   lastDiscoveryAt: string | null;
   /** Names only of the opt-in runtime env; values never leave the server. */
   runtimeEnvKeys?: string[];
