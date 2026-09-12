@@ -7,10 +7,11 @@
  * The grants section is the visible counterpart to the permission sheet: what
  * you approved, and a way to take it back.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useHealth, useGrants, useRevokeGrant, useSettingsConfig,
-  useConnections, useSetConnection, useRemoveConnection,
+  useConnections, useSetConnection, useRemoveConnection, useOAuthStart,
 } from '@/hooks/api';
 import { useAuthStore } from '@/store/auth';
 import {
@@ -27,12 +28,33 @@ export function SettingsPage() {
   const { data: connections } = useConnections();
   const revoke = useRevokeGrant();
 
+  // The OAuth callback bounces back here with ?connected= or ?connect_error=.
+  // Capture it once, then strip it from the URL so a refresh does not re-show it.
+  const [params, setParams] = useSearchParams();
+  const [notice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(() => {
+    const c = params.get('connected');
+    const e = params.get('connect_error');
+    if (c) return { tone: 'success', text: `Connected your ${c} account.` };
+    if (e) return { tone: 'danger', text: e };
+    return null;
+  });
+  useEffect(() => {
+    if (params.get('connected') || params.get('connect_error')) {
+      const p = new URLSearchParams(params);
+      p.delete('connected');
+      p.delete('connect_error');
+      setParams(p, { replace: true });
+    }
+  }, [params, setParams]);
+
   return (
     <div className="max-w-3xl space-y-4">
       <div>
         <h1 className="t-h1">Settings</h1>
         <p className="t-small mt-1 text-ink-muted">Profile, providers and active permissions.</p>
       </div>
+
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
 
       <Card>
         <CardHeader title="Profile" />
@@ -53,7 +75,8 @@ export function SettingsPage() {
           </p>
           {(['github', 'render', 'vercel'] as const).map((provider) => (
             <ConnectionRow key={provider} provider={provider}
-              conn={connections?.connections.find((c) => c.provider === provider)} />
+              conn={connections?.connections.find((c) => c.provider === provider)}
+              oauthAvailable={Boolean(connections?.oauth?.[provider])} />
           ))}
         </CardBody>
       </Card>
@@ -193,11 +216,14 @@ const PROVIDER_META: Record<Connection['provider'], { label: string; placeholder
   vercel: { label: 'Vercel', placeholder: 'Vercel access token', where: 'vercel.com/account/tokens' },
 };
 
-/** One provider: connect with a pasted token, or show connected + disconnect. */
-function ConnectionRow({ provider, conn }: { provider: Connection['provider']; conn?: Connection }) {
+/** One provider: connect via OAuth or a pasted token, or show connected + disconnect. */
+function ConnectionRow({ provider, conn, oauthAvailable }: {
+  provider: Connection['provider']; conn?: Connection; oauthAvailable?: boolean;
+}) {
   const meta = PROVIDER_META[provider];
   const setConn = useSetConnection();
   const removeConn = useRemoveConnection();
+  const oauthStart = useOAuthStart();
   const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const connected = conn?.connected;
@@ -209,6 +235,16 @@ function ConnectionRow({ provider, conn }: { provider: Connection['provider']; c
       setToken('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save the token.');
+    }
+  };
+
+  const connectOAuth = async () => {
+    setError(null);
+    try {
+      const { url } = await oauthStart.mutateAsync({ provider });
+      window.location.href = url; // full-page redirect to the provider's consent screen
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not start the connect flow.');
     }
   };
 
@@ -229,18 +265,26 @@ function ConnectionRow({ provider, conn }: { provider: Connection['provider']; c
         ) : (
           <>
             <Chip className="bg-surface-3 text-ink-subtle">not connected</Chip>
-            <span className="t-small text-ink-subtle">from {meta.where}</span>
+            {!oauthAvailable && <span className="t-small text-ink-subtle">from {meta.where}</span>}
           </>
         )}
       </div>
       {!connected && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Input mono type="password" autoComplete="off" placeholder={meta.placeholder}
-            className="min-w-0 flex-1" value={token} onChange={(e) => setToken(e.target.value)} />
-          <Button size="sm" loading={setConn.isPending} disabled={token.trim().length < 8}
-            onClick={() => void connect()}>
-            Connect
-          </Button>
+        <div className="mt-2 space-y-2">
+          {oauthAvailable && (
+            <Button size="sm" loading={oauthStart.isPending} onClick={() => void connectOAuth()}>
+              Connect with {meta.label}
+            </Button>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Input mono type="password" autoComplete="off" placeholder={meta.placeholder}
+              className="min-w-0 flex-1" value={token} onChange={(e) => setToken(e.target.value)} />
+            <Button size="sm" variant={oauthAvailable ? 'secondary' : 'primary'}
+              loading={setConn.isPending} disabled={token.trim().length < 8}
+              onClick={() => void connect()}>
+              {oauthAvailable ? 'Use a token' : 'Connect'}
+            </Button>
+          </div>
         </div>
       )}
       {error && <p className="t-small mt-1.5 text-danger">{error}</p>}

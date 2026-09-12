@@ -309,8 +309,16 @@ export function useImportProjectEnv() {
 
 export const useConnections = () => useQuery({
   queryKey: ['connections'],
-  queryFn: () => apiGet<{ connections: Connection[] }>('/connections'),
+  queryFn: () => apiGet<{ connections: Connection[]; oauth?: Record<string, boolean> }>('/connections'),
 });
+
+/** Begin an OAuth connect: returns the provider authorize URL to redirect to. */
+export function useOAuthStart() {
+  return useMutation({
+    mutationFn: (vars: { provider: string }) =>
+      apiPost<{ url: string }>(`/connections/${vars.provider}/oauth/start`, {}),
+  });
+}
 
 export function useSetConnection() {
   const qc = useQueryClient();
