@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="web/public/brand/lockup.svg" alt="AGENTIQ" width="440">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="web/public/brand/lockup-dark.svg">
+  <img src="web/public/brand/lockup.svg" alt="AGENTIQ" width="440">
+</picture>
 
 ### API testing and security validation by AI agents that can only act through an audited, permission-gated tool layer
 
