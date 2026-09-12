@@ -4,7 +4,7 @@
  * place the platform pulls in code it did not write.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeGithubUrl, GitError } from '../src/services/git.service.js';
+import { normalizeGithubUrl, authedCloneUrl, GitError } from '../src/services/git.service.js';
 
 describe('normalizeGithubUrl', () => {
   it('accepts a public https GitHub repo URL, with or without .git or a trailing slash', () => {
@@ -29,5 +29,17 @@ describe('normalizeGithubUrl', () => {
     for (const url of bad) {
       expect(() => normalizeGithubUrl(url), url).toThrow(GitError);
     }
+  });
+});
+
+describe('authedCloneUrl', () => {
+  it('embeds an url-encoded token for a private clone', () => {
+    expect(authedCloneUrl('https://github.com/o/r', 'ghp_ab/cd'))
+      .toBe('https://x-access-token:ghp_ab%2Fcd@github.com/o/r');
+  });
+
+  it('returns the plain url when there is no token', () => {
+    expect(authedCloneUrl('https://github.com/o/r', null)).toBe('https://github.com/o/r');
+    expect(authedCloneUrl('https://github.com/o/r', '')).toBe('https://github.com/o/r');
   });
 });

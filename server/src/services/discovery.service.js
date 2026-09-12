@@ -13,6 +13,7 @@
 import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
 import { cloneRepo, normalizeGithubUrl, GitError } from './git.service.js';
+import { getConnectionToken } from './connections.service.js';
 import { cloneQueue } from '../lib/jobQueue.js';
 import { readTextInJail } from '../mcp/analysis/workspace.js';
 import { getTool } from '../mcp/registry.js';
@@ -86,7 +87,7 @@ export async function createProject({
     ...(startScript && startScript.trim() ? { startScript: startScript.trim() } : {}),
   });
   if (cloning && scheduleClone) {
-    cloneQueue.enqueue(() => runCloneJob({ projectId: project._id, repoUrl: normalizedRepo })
+    cloneQueue.enqueue(() => runCloneJob({ projectId: project._id, repoUrl: normalizedRepo, userId })
       .catch((err) => logger.error({ err: err.message }, 'clone job crashed')));
   }
   return project;
@@ -98,9 +99,12 @@ export async function createProject({
  * reason, so the UI shows it instead of the project hanging. `clone` is
  * injectable so tests can drive both paths without touching the network.
  */
-export async function runCloneJob({ projectId, repoUrl, clone = cloneRepo }) {
+export async function runCloneJob({ projectId, repoUrl, userId = null, clone = cloneRepo }) {
   try {
-    const cloned = await clone({ url: repoUrl });
+    // Use the user's own GitHub token when they have connected one, so a private
+    // repo clones; absent, it is a public clone.
+    const token = userId ? await getConnectionToken({ userId, provider: 'github' }).catch(() => null) : null;
+    const cloned = await clone({ url: repoUrl, token });
     await Project.updateOne(
       { _id: projectId },
       { $set: { workspaceRoot: cloned.path, cloneStatus: 'ready' }, $unset: { cloneError: '' } },

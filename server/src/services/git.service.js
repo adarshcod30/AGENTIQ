@@ -53,19 +53,37 @@ export function normalizeGithubUrl(raw) {
 }
 
 /**
+ * Embeds a token for cloning a PRIVATE repo. `x-access-token` is GitHub's
+ * documented username for a personal or installation token over https. Without a
+ * token the URL is unchanged (public clone).
+ */
+export function authedCloneUrl(repoUrl, token) {
+  if (!token) return repoUrl;
+  return repoUrl.replace(/^https:\/\//, `https://x-access-token:${encodeURIComponent(token)}@`);
+}
+
+/** Strips a token from text, so it can never reach a log, an error, or the UI. */
+function redactToken(text, token) {
+  let out = String(text);
+  if (token) out = out.split(token).join('***').split(encodeURIComponent(token)).join('***');
+  return out;
+}
+
+/**
  * Shallow-clones a public GitHub repo and returns its canonical local path.
  *
  * @returns {Promise<{ path: string, repoUrl: string }>}
  */
-export async function cloneRepo({ url, timeoutMs = 60_000 } = {}) {
+export async function cloneRepo({ url, token = null, timeoutMs = 60_000 } = {}) {
   const repoUrl = normalizeGithubUrl(url);
+  const target = authedCloneUrl(repoUrl, token); // token embedded only for a private repo
   mkdirSync(clonesRoot(), { recursive: true });
   const dest = mkdtempSync(path.join(clonesRoot(), 'repo-'));
 
   try {
     await execFileP(
       'git',
-      ['clone', '--depth', '1', '--single-branch', '--no-tags', repoUrl, dest],
+      ['clone', '--depth', '1', '--single-branch', '--no-tags', target, dest],
       {
         timeout: timeoutMs,
         windowsHide: true,
@@ -82,7 +100,7 @@ export async function cloneRepo({ url, timeoutMs = 60_000 } = {}) {
     );
   } catch (err) {
     rmSync(dest, { recursive: true, force: true });
-    const detail = String(err.stderr || err.message || '').split('\n').find(Boolean) ?? 'clone failed';
+    const detail = redactToken(String(err.stderr || err.message || '').split('\n').find(Boolean) ?? 'clone failed', token);
     if (err.killed || /timed out/i.test(String(err.message))) {
       throw new GitError('Cloning timed out. Is the repository very large?', 'CLONE_TIMEOUT');
     }
