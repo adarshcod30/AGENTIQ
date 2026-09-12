@@ -33,9 +33,24 @@ import { defineTool } from '../registry.js';
 import { RISK_CLASS } from '../permissions.js';
 import { fetchGuarded } from '../egress.js';
 import { env } from '../../config/env.js';
+import { getConnectionToken } from '../../services/connections.service.js';
 
 /** Overridable so tests can point at a local fake control plane. */
 export const RENDER_API_BASE = () => env.RENDER_API_BASE ?? 'https://api.render.com/v1';
+
+/**
+ * Whose Render key to deploy with. The user's OWN connected token wins (this is
+ * a multi-tenant product: a user deploys to their own Render account), and the
+ * platform RENDER_API_KEY is the fallback for the owner or an MCP client with no
+ * user context.
+ */
+async function resolveRenderKey(userId) {
+  if (userId) {
+    const token = await getConnectionToken({ userId, provider: 'render' }).catch(() => null);
+    if (token) return token;
+  }
+  return env.RENDER_API_KEY;
+}
 
 /** Render deploy statuses that mean "stop polling". */
 export const TERMINAL_SUCCESS = new Set(['live']);
@@ -201,15 +216,15 @@ export default defineTool({
   inputSchema,
   outputSchema,
 
-  async handler(input) {
+  async handler(input, context) {
     const base = (input.baseUrl ?? RENDER_API_BASE()).replace(/\/+$/, '');
-    const apiKey = env.RENDER_API_KEY;
+    const apiKey = await resolveRenderKey(context?.userId);
 
     if (!apiKey) {
       // An honest unconfigured state, not a fabricated success.
       throw new DeployError(
-        'RENDER_API_KEY is not configured, so no deployment can be attempted. Add it to ' +
-        'server/.env (Render dashboard → Account Settings → API Keys).',
+        'No Render credential is available, so no deployment can be attempted. Connect your Render '
+        + 'account in Settings, or set RENDER_API_KEY in the server environment.',
         'DEPLOY_NOT_CONFIGURED',
       );
     }

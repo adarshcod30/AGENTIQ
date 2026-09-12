@@ -13,6 +13,7 @@ import {
   AUTO_VERIFY_FAMILIES, REQUIRES_APPROVAL_FAMILIES, PREFLIGHT_HOSTS,
 } from '../services/deployment.service.js';
 import { listProviders, PROVIDER_NAMES } from '../deploy/index.js';
+import { getConnectionToken } from '../services/connections.service.js';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 
@@ -77,9 +78,15 @@ router.post('/', protectRoute, async (req, res) => {
       parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })));
   }
 
-  if (!isConfigured()) {
+  // Multi-tenant: the user's own connected token for this provider is enough. The
+  // platform env key is only a fallback (Render today), so an operator can still
+  // deploy without connecting an account.
+  const provider = parsed.data.provider ?? 'render';
+  const hasOwnToken = Boolean(await getConnectionToken({ userId: req.user._id, provider }).catch(() => null));
+  const hasPlatformKey = provider === 'render' && isConfigured();
+  if (!hasOwnToken && !hasPlatformKey) {
     return fail(res, 503, 'DEPLOY_NOT_CONFIGURED',
-      'RENDER_API_KEY is not configured, so no deployment can be attempted.');
+      `No ${provider} credential. Connect your ${provider} account in Settings, or set the platform key in the server environment.`);
   }
 
   const sessionId = sessionOf(req);
