@@ -10,6 +10,8 @@ import { Card, CardHeader, CardBody, Alert, RiskChip, Chip } from '@/components/
 const COVERED = [
   ['SQL injection', 'API8:2023', 'DB error fingerprints plus a baseline differential.'],
   ['Reflected XSS', 'API8:2023', 'A uniquely marked payload echoed unescaped into an HTML response.'],
+  ['Server-side request forgery', 'API7:2023', 'A URL parameter pointed at the cloud metadata address and an internal host, checked for a server-side fetch.'],
+  ['Open redirect', 'API7:2023', 'An off-site destination injected into a redirect parameter, read from the Location header without following it.'],
   ['Broken authentication', 'API2:2023', 'Credentials stripped and forged, compared against an authenticated baseline.'],
   ['CORS misconfiguration', 'API8:2023', 'Wildcard origin with credentials, or reflection of an arbitrary origin.'],
   ['Security headers', 'API8:2023', 'HSTS, CSP, X-Content-Type-Options, X-Frame-Options.'],
@@ -21,7 +23,7 @@ const NOT_COVERED = [
   'Business-logic flaws: the tool has no model of what your data means.',
   'Authorisation between users (IDOR) beyond the single-endpoint check.',
   'Anything requiring exploitation. Detection only, by design.',
-  'Deserialisation, SSRF in the TARGET, and dependency vulnerabilities.',
+  'Blind SSRF that needs an out-of-band callback, and dependency vulnerabilities.',
 ];
 
 export function AboutPage() {
@@ -54,7 +56,7 @@ export function AboutPage() {
       </Card>
 
       <Alert tone="warning" title="A clean scan is not a guarantee of security">
-        AGENTIQ checks six families of defect on the endpoint you nominate. It does not
+        AGENTIQ checks eight families of defect on the endpoint you nominate. It does not
         replace a penetration test, a code review, or a threat model.
       </Alert>
 

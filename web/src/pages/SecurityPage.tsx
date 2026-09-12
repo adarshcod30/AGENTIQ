@@ -1,7 +1,7 @@
 /**
  * Security: docs/03_App_Flow.md B4.
  *
- * Six families shown as `not yet run` / `running` / `clean` / `N findings`,
+ * Eight families shown as `not yet run` / `running` / `clean` / `N findings`,
  * then findings sorted by severity.
  *
  * The "intended to be public" checkbox is LOAD-BEARING and the page says so.
@@ -23,6 +23,8 @@ import type { HttpMethod, RiskClass } from '@/types';
 const FAMILY_LABELS: Record<string, string> = {
   sqli: 'SQL injection',
   xss: 'Reflected XSS',
+  ssrf: 'Server-side request forgery',
+  redirect: 'Open redirect',
   auth: 'Broken authentication',
   cors: 'CORS misconfiguration',
   headers: 'Security headers',

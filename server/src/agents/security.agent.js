@@ -8,10 +8,10 @@
  * Every request is made by an MCP tool: permission-checked, SSRF-guarded,
  * audited.
  *
- * SIX FAMILIES, five of them tools. Rate limiting is orchestrated here from
- * repeated `http_request` calls rather than a tenth tool, because
- * that would be a tenth network tool, and every one of those requests is
- * individually audited anyway.
+ * EIGHT FAMILIES, seven of them tools. Rate limiting is orchestrated here from
+ * repeated `http_request` calls rather than its own tool, because that would be
+ * one more network tool, and every one of those requests is individually
+ * audited anyway.
  */
 import { SEVERITY } from '../mcp/probes/baseline.js';
 import {
@@ -19,10 +19,12 @@ import {
   CONFIDENCE, LANE,
 } from '../mcp/analysis/findings.js';
 
-/** The six families, in the order the UI shows them. */
+/** The eight families, in the order the UI shows them. */
 export const FAMILIES = [
   { key: 'sqli', tool: 'probe_sqli', label: 'SQL injection', owasp: 'API8:2023 Security Misconfiguration' },
   { key: 'xss', tool: 'probe_xss', label: 'Reflected XSS', owasp: 'API8:2023 Security Misconfiguration' },
+  { key: 'ssrf', tool: 'probe_ssrf', label: 'Server-side request forgery', owasp: 'API7:2023 Server-Side Request Forgery' },
+  { key: 'redirect', tool: 'probe_redirect', label: 'Open redirect', owasp: 'API7:2023 Server-Side Request Forgery' },
   { key: 'auth', tool: 'probe_auth', label: 'Broken authentication', owasp: 'API2:2023 Broken Authentication' },
   { key: 'cors', tool: 'probe_cors', label: 'CORS misconfiguration', owasp: 'API8:2023 Security Misconfiguration' },
   { key: 'headers', tool: 'probe_headers', label: 'Security headers', owasp: 'API8:2023 Security Misconfiguration' },

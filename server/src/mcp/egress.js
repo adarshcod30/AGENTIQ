@@ -336,6 +336,12 @@ export async function fetchGuarded(rawUrl, options = {}) {
     maxBytes = env.EGRESS_MAX_BYTES ?? 5_242_880,
     maxRedirects = 3,
     limiter = rateLimiter,
+    // When false, the FIRST response is returned as-is, redirect or not, so the
+    // caller can read the Location header without us following it. The
+    // open-redirect probe needs this: a target that redirects off-site to a
+    // canary host would otherwise make us chase (and DNS-fail on) that host
+    // before the probe ever saw where it was being sent.
+    followRedirects = true,
   } = options;
 
   const started = Date.now();
@@ -361,6 +367,18 @@ export async function fetchGuarded(rawUrl, options = {}) {
     });
 
     chain.push({ url: url.toString(), ip: address, status: res.status });
+
+    // The caller wants the raw first hop. Hand it back with its Location intact,
+    // rather than following the redirect ourselves.
+    if (!followRedirects) {
+      return {
+        ...res,
+        url: url.toString(),
+        ip: address,
+        redirects: chain.slice(0, -1),
+        durationMs: Date.now() - started,
+      };
+    }
 
     const location = res.headers?.location;
     if (!REDIRECT_CODES.has(res.status) || !location) {

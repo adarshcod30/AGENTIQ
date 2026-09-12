@@ -103,6 +103,8 @@ describe('POST /api/projects/:id/discover', () => {
     const surface = discovery.endpoints.map((e) => `${e.method} ${e.path}`).sort();
     expect(surface).toEqual([
       'GET /admin/users',
+      'GET /fetch',
+      'GET /go',
       'GET /health',
       'GET /items',
       'GET /search',

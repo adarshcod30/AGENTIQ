@@ -46,6 +46,8 @@ describe('analyzeSource against the vulnerable fixture', () => {
     const surface = routes.map((r) => `${r.method} ${r.path}`).sort();
     expect(surface).toEqual([
       'GET /admin/users',
+      'GET /fetch',
+      'GET /go',
       'GET /health',
       'GET /items',
       'GET /search',
@@ -72,6 +74,8 @@ describe('analyzeSource against the hardened fixture', () => {
     const surface = routes.map((r) => `${r.method} ${r.path}`).sort();
     expect(surface).toEqual([
       'GET /admin/users',
+      'GET /fetch',
+      'GET /go',
       'GET /health',
       'GET /items',
       'GET /search',

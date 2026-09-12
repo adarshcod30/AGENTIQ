@@ -213,7 +213,7 @@ describe('importSpecFromText', () => {
     const { spec } = await importSpecFromText({
       userId: user._id, text, runTool: runner(),
     });
-    expect(spec.operationCount).toBe(6);
+    expect(spec.operationCount).toBe(8);
     expect(spec.securitySchemes.map((s) => s.name)).toContain('bearerAuth');
   });
 

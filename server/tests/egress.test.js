@@ -179,6 +179,17 @@ describe('redirects are re-validated at every hop', () => {
     });
   });
 
+  it('followRedirects:false returns the raw 3xx with its Location intact', async () => {
+    // The open-redirect probe relies on this: read where the server WOULD send
+    // us without chasing a destination that may not resolve.
+    await withPrivateTargets(async () => {
+      const res = await fetchGuarded(`${base}/redirect-once`, { followRedirects: false });
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('/ok');
+      expect(res.redirects).toHaveLength(0);
+    });
+  });
+
   it('REFUSES a redirect chain ending at the metadata endpoint', async () => {
     // This is the bypass that defeats a guard which only checks the first URL.
     // ALLOW_PRIVATE_TARGETS lets hop 1 through; hop 2 must still be refused,

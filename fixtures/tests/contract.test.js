@@ -98,6 +98,22 @@ describe('identical contract on benign traffic', () => {
     // Benign input contains nothing to escape, so the pages are byte-identical.
     expect(v.text).toBe(h.text);
   });
+
+  it('GET /fetch returns the same preview for an allowed URL', async () => {
+    const { v, h } = await both((app) => request(app).get('/fetch?url=https://example.com/'));
+    expect(v.status).toBe(200);
+    expect(h.status).toBe(200);
+    expect(v.body).toEqual(h.body);
+    expect(v.body).toMatchObject({ url: 'https://example.com/', ok: true });
+  });
+
+  it('GET /go bounces the same way for a same-site path', async () => {
+    const { v, h } = await both((app) => request(app).get('/go?next=/dashboard'));
+    expect(v.status).toBe(302);
+    expect(h.status).toBe(302);
+    expect(v.headers.location).toBe('/dashboard');
+    expect(h.headers.location).toBe('/dashboard');
+  });
 });
 
 // ── The defects. Each is what a probe family must detect. ────────────────────
@@ -211,5 +227,37 @@ describe('DEFECT 6: rate limiting', () => {
     const res = await request(hardened).get('/health');
     const advertised = res.headers['ratelimit-limit'] ?? res.headers['ratelimit'];
     expect(advertised).toBeDefined();
+  });
+});
+
+describe('DEFECT 7: SSRF', () => {
+  const METADATA = 'http://169.254.169.254/latest/meta-data/iam/security-credentials/';
+
+  it('vulnerable fetches the metadata address and leaks credentials', async () => {
+    const res = await request(vulnerable).get(`/fetch?url=${encodeURIComponent(METADATA)}`);
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).toMatch(/AccessKeyId|security-credentials|"Code":"Success"/);
+  });
+
+  it('hardened refuses the internal host without fetching it', async () => {
+    const res = await request(hardened).get(`/fetch?url=${encodeURIComponent(METADATA)}`);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).not.toMatch(/AccessKeyId|security-credentials/);
+  });
+});
+
+describe('DEFECT 8: open redirect', () => {
+  const OFFSITE = 'https://evil.example/phish';
+
+  it('vulnerable sends the browser off-site', async () => {
+    const res = await request(vulnerable).get(`/go?next=${encodeURIComponent(OFFSITE)}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(OFFSITE);
+  });
+
+  it('hardened falls back to a same-site path', async () => {
+    const res = await request(hardened).get(`/go?next=${encodeURIComponent(OFFSITE)}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/');
   });
 });

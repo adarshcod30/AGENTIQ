@@ -19,12 +19,15 @@
  *   4. CORS             -> explicit origin allow-list, no wildcard+credentials
  *   5. Security headers -> helmet
  *   6. Rate limiting    -> express-rate-limit
+ *   7. SSRF             -> /fetch refuses private and internal hosts, no fetch
+ *   8. Open redirect    -> /go only bounces to same-site paths
  */
 import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import {
   PORTS, ADMIN_TOKEN, publicUser, createDb, searchPage, escapeHtml,
+  isPrivateUrlHost, previewOf, isSafeRelativePath,
 } from '../shared/data.js';
 
 const db = await createDb();
@@ -106,6 +109,21 @@ app.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   return res.json({ token: ADMIN_TOKEN, user: publicUser(row) });
+});
+
+/** FIX 7: refuse private and internal hosts up front, and never fetch them. */
+app.get('/fetch', (req, res) => {
+  const raw = String(req.query.url ?? '');
+  let host;
+  try { host = new URL(raw).host; } catch { return res.status(400).json({ error: 'Invalid url' }); }
+  if (isPrivateUrlHost(host)) return res.status(400).json({ error: 'URL host not allowed' });
+  return res.json(previewOf(raw));
+});
+
+/** FIX 8: only ever bounce to a same-site path; anything off-site falls back to "/". */
+app.get('/go', (req, res) => {
+  const next = String(req.query.next || '/');
+  return res.redirect(isSafeRelativePath(next) ? next : '/');
 });
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

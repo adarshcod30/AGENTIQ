@@ -14,12 +14,15 @@
  *   4. CORS               Access-Control-Allow-Origin: * WITH credentials
  *   5. Security headers: none set at all
  *   6. Rate limiting      none
+ *   7. SSRF               /fetch retrieves any URL it is handed, metadata included
+ *   8. Open redirect      /go sends the browser to any destination it is handed
  *
  * Bound to 127.0.0.1 only. It must never be reachable off this machine.
  */
 import express from 'express';
 import {
   PORTS, ADMIN_TOKEN, publicUser, createDb, searchPage, noEscape,
+  isPrivateUrlHost, metadataBody, previewOf,
 } from '../shared/data.js';
 
 const db = await createDb();
@@ -101,6 +104,34 @@ app.post('/login', (req, res) => {
   }
   return res.json({ token: ADMIN_TOKEN, user: publicUser(row) });
 });
+
+/**
+ * DEFECT 7: SSRF.
+ * A link-preview endpoint that fetches whatever URL it is given, with no
+ * allow-list. Pointed at the cloud metadata address it returns the instance's
+ * credentials; pointed at an internal address it makes the request anyway and
+ * leaks the connection error. The fetch is simulated so the fixture needs no
+ * real network, but the exposure it models is exactly the real one.
+ */
+app.get('/fetch', (req, res) => {
+  const raw = String(req.query.url ?? '');
+  let host;
+  try { host = new URL(raw).host; } catch { return res.status(400).json({ error: 'Invalid url' }); }
+
+  if (/^169\.254\.169\.254(:|$|\/)/.test(host) || host === 'metadata.google.internal') {
+    return res.json({ url: raw, ok: true, body: metadataBody() });
+  }
+  if (isPrivateUrlHost(host)) {
+    return res.status(502).json({ url: raw, ok: false, error: `fetch failed: connect ECONNREFUSED ${host}` });
+  }
+  return res.json(previewOf(raw));
+});
+
+/**
+ * DEFECT 8: open redirect.
+ * A post-login bounce that redirects to whatever `next` says, on-site or not.
+ */
+app.get('/go', (req, res) => res.redirect(String(req.query.next || '/')));
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 

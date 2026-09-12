@@ -139,6 +139,48 @@ export function buildSpec(variant) {
           },
         },
       },
+      '/fetch': {
+        get: {
+          operationId: 'fetchUrlPreview',
+          summary: 'Fetch a preview of the given URL',
+          parameters: [{
+            name: 'url', in: 'query', required: true,
+            schema: { type: 'string', format: 'uri' },
+            description: 'Absolute http(s) URL to preview',
+          }],
+          responses: {
+            200: {
+              description: 'Preview of the fetched URL',
+              ...json({
+                type: 'object',
+                required: ['url', 'ok'],
+                properties: {
+                  url: { type: 'string' },
+                  ok: { type: 'boolean' },
+                  status: { type: 'integer' },
+                  contentType: { type: 'string' },
+                  title: { type: 'string' },
+                },
+              }),
+            },
+            400: { description: 'Invalid or disallowed url', ...json({ $ref: '#/components/schemas/Error' }) },
+          },
+        },
+      },
+      '/go': {
+        get: {
+          operationId: 'redirectNext',
+          summary: 'Redirect the browser to the given destination',
+          parameters: [{
+            name: 'next', in: 'query', required: false,
+            schema: { type: 'string' },
+            description: 'Where to send the browser after the bounce',
+          }],
+          responses: {
+            302: { description: 'Redirect to the destination' },
+          },
+        },
+      },
       '/login': {
         post: {
           operationId: 'login',

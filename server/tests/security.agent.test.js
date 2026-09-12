@@ -70,7 +70,7 @@ beforeEach(async () => {
 
 /**
  * Different defects live at different endpoints, so a single-URL scan cannot
- * reach all six families: /admin/users has no injectable parameter and
+ * reach all eight families: /admin/users has no injectable parameter and
  * reflects nothing. A real scan covers the surface, and so does this one.
  *
  * `intendedPublic` reflects each route's ACTUAL intent, identically for both
@@ -82,6 +82,8 @@ const TARGETS = [
   { path: '/users/1', intendedPublic: true, why: 'SQLi via path segment' },
   { path: '/items?ownerId=1', intendedPublic: true, why: 'SQLi via query parameter' },
   { path: '/search?q=agentiq', intendedPublic: true, why: 'reflected XSS' },
+  { path: '/fetch?url=https://example.com/', intendedPublic: true, why: 'SSRF via url parameter' },
+  { path: '/go?next=/home', intendedPublic: true, why: 'open redirect via next parameter' },
   { path: '/admin/users', intendedPublic: false, why: 'privileged route' },
 ];
 
@@ -122,9 +124,9 @@ describe('RECALL: vulnerable-api', () => {
     scan = await scanAll(vulnUrl);
   }, 120_000);
 
-  it('detects at least 5 of the 6 families', () => {
+  it('detects at least 7 of the 8 families', () => {
     const detected = scan.families.filter((f) => f.findings.length > 0).map((f) => f.family);
-    expect(detected.length, `detected: ${detected.join(', ')}`).toBeGreaterThanOrEqual(5);
+    expect(detected.length, `detected: ${detected.join(', ')}`).toBeGreaterThanOrEqual(7);
   });
 
   it('detects SQL injection and names the database engine', () => {
@@ -135,6 +137,19 @@ describe('RECALL: vulnerable-api', () => {
 
   it('detects reflected XSS', () => {
     expect(scan.families.find((f) => f.family === 'xss').findings.length).toBeGreaterThan(0);
+  });
+
+  it('detects SSRF and rates the metadata leak critical', () => {
+    const ssrf = scan.families.find((f) => f.family === 'ssrf');
+    expect(ssrf.findings.length).toBeGreaterThan(0);
+    expect(ssrf.findings.some((f) => f.severity === 'critical')).toBe(true);
+    expect(ssrf.findings.some((f) => /metadata|credential/i.test(f.explanation))).toBe(true);
+  });
+
+  it('detects the open redirect and names the off-site destination', () => {
+    const redirect = scan.families.find((f) => f.family === 'redirect');
+    expect(redirect.findings.length).toBeGreaterThan(0);
+    expect(redirect.findings[0].signal).toMatch(/agentiq-redirect-probe\.example/);
   });
 
   it('detects broken authentication on the privileged route', () => {
@@ -195,8 +210,8 @@ describe('PRECISION: hardened-api must produce ZERO findings', () => {
     expect(scan.findings, `unexpected findings:\n  ${detail}`).toHaveLength(0);
   });
 
-  it('still RUNS all six families: clean is a result, not a skip', () => {
-    expect(scan.families).toHaveLength(6);
+  it('still RUNS all eight families: clean is a result, not a skip', () => {
+    expect(scan.families).toHaveLength(8);
     expect(scan.families.every((f) => f.findings.length === 0)).toBe(true);
   });
 
@@ -380,7 +395,9 @@ describe('summary', () => {
     ])).toEqual({ critical: 1, high: 2, medium: 0, low: 1 });
   });
 
-  it('declares all six families', () => {
-    expect(FAMILIES.map((f) => f.key)).toEqual(['sqli', 'xss', 'auth', 'cors', 'headers', 'rate']);
+  it('declares all eight families', () => {
+    expect(FAMILIES.map((f) => f.key)).toEqual(
+      ['sqli', 'xss', 'ssrf', 'redirect', 'auth', 'cors', 'headers', 'rate'],
+    );
   });
 });

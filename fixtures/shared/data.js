@@ -79,3 +79,46 @@ export const escapeHtml = (s) =>
 
 /** No escaping at all: the vulnerable app's defect. */
 export const noEscape = (s) => String(s);
+
+// ── URL-fetch and redirect helpers (defects 7 and 8) ─────────────────────────
+
+/**
+ * True for a host a server must never fetch on a client's behalf: loopback,
+ * private ranges, link-local (which includes the cloud metadata address) and
+ * the internal DNS names. The hardened /fetch checks this; the vulnerable one
+ * does not. Only what the fixtures exercise, not a full parser.
+ */
+export function isPrivateUrlHost(host) {
+  const h = String(host ?? '').split(':')[0].toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost' || h === '0.0.0.0' || h === '::1') return true;
+  if (h === 'metadata.google.internal' || h.endsWith('.internal') || h.endsWith('.local')) return true;
+  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  return false;
+}
+
+/** Stand-in for content a real SSRF against the cloud metadata service returns. */
+export const metadataBody = () => JSON.stringify({
+  Code: 'Success',
+  Type: 'AWS-HMAC',
+  AccessKeyId: 'ASIAFIXTUREEXAMPLE',
+  SecretAccessKey: 'wFixtureSecretKeyDoNotUse',
+  Token: 'FIXTURE-SESSION-TOKEN',
+});
+
+/** The identical, network-free preview both apps return for an allowed URL. */
+export const previewOf = (url) => ({
+  url, ok: true, status: 200, contentType: 'text/html', title: 'Fixture preview',
+});
+
+/**
+ * A redirect target that stays on this site: exactly "/" or a path beginning
+ * with a single "/" that is not "//" or "/\" (both of which a browser reads as
+ * protocol-relative and would leave the site). The hardened /go enforces this.
+ */
+export function isSafeRelativePath(next) {
+  const v = String(next ?? '');
+  if (v === '/') return true;
+  return /^\/[^/\\]/.test(v);
+}

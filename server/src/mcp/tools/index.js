@@ -24,6 +24,8 @@ export async function registerAllTools() {
     import('./probe_auth.js'),
     import('./probe_cors.js'),
     import('./probe_headers.js'),
+    import('./probe_ssrf.js'),
+    import('./probe_redirect.js'),
     import('./parse_openapi.js'),
     import('./deploy_service.js'),
     // Discovery (docs/10_AUTONOMOUS_PLATFORM.md, Phase 1).
@@ -53,6 +55,8 @@ export const EXPECTED_TOOLS = [
   'probe_auth',
   'probe_cors',
   'probe_headers',
+  'probe_ssrf',
+  'probe_redirect',
   'parse_openapi',
   'deploy_service',
   'fs_read',
