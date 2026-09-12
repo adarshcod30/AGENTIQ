@@ -9,7 +9,7 @@
  * scanner as the thing under test.
  *
  * ── `intendedPublic` IS PART OF THE GROUND TRUTH ────────────────────────────
- * Three of these four endpoints are meant to be reachable anonymously. An
+ * All but one of these endpoints are meant to be reachable anonymously. An
  * anonymous 200 there is CORRECT behaviour, not broken authentication. A
  * scanner with no such declaration reports an auth finding on every public
  * endpoint it ever sees. Encoding intent here is what makes the false-positive
@@ -38,7 +38,7 @@
 export const FIXTURE_ADMIN_TOKEN = 'fixture-admin-token';
 
 /** Families in the order the report tabulates them. */
-export const FAMILIES = ['sqli', 'xss', 'auth', 'cors', 'headers', 'rate'];
+export const FAMILIES = ['sqli', 'xss', 'ssrf', 'redirect', 'auth', 'cors', 'headers', 'rate'];
 
 /**
  * `vulnerable` lists the families that ARE genuinely present on that endpoint
@@ -74,6 +74,24 @@ export const TARGETS = [
     intendedPublic: true,
     // DEFECT 2: the term is written into the HTML unescaped.
     vulnerable: ['xss', 'cors', 'headers', 'rate'],
+  },
+  {
+    id: 'fetch-preview',
+    path: '/fetch?url=https://example.com/',
+    method: 'GET',
+    description: 'Link preview. Fetches the given url on the server and returns a summary.',
+    intendedPublic: true,
+    // DEFECT 7: fetches any url with no allow-list, cloud metadata included.
+    vulnerable: ['ssrf', 'cors', 'headers', 'rate'],
+  },
+  {
+    id: 'go-redirect',
+    path: '/go?next=/home',
+    method: 'GET',
+    description: 'Post-action bounce. Redirects the browser to the next parameter.',
+    intendedPublic: true,
+    // DEFECT 8: redirects to any destination, on-site or not.
+    vulnerable: ['redirect', 'cors', 'headers', 'rate'],
   },
   {
     id: 'admin-users',

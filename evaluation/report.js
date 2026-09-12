@@ -69,11 +69,14 @@ export function renderReport({ security, mutation, meta }) {
     '',
   );
   if (security.falsePositives.length === 0) {
+    const vuln = security.observations.filter((x) => x.variant === 'vulnerable');
+    const endpoints = new Set(vuln.map((x) => x.path));
+    const publicEndpoints = new Set(vuln.filter((x) => x.intendedPublic).map((x) => x.path));
     w(
       'No false positives. The control that produces this result is the `intendedPublic`',
-      'declaration: three of the four endpoints are meant to be reachable anonymously, so an',
-      'anonymous 200 there is correct behaviour rather than broken authentication. Without that',
-      'declaration, every public endpoint would carry an auth finding.',
+      `declaration: ${publicEndpoints.size} of the ${endpoints.size} endpoints are meant to be reachable ` +
+      'anonymously, so an anonymous 200 there is correct behaviour rather than broken authentication. ',
+      'Without that declaration, every public endpoint would carry an auth finding.',
       '',
     );
   } else {

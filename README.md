@@ -20,7 +20,7 @@
 ---
 
 Paste an API URL and a sentence describing what the endpoint should do. AGENTIQ generates test
-cases with an LLM, **executes** them, and runs a six-family OWASP security scan. Point it at a whole
+cases with an LLM, **executes** them, and runs an eight-family OWASP security scan. Point it at a whole
 project instead, a local folder, a GitHub repo, or a deployed URL, and it discovers the routes,
 tests them, scans them, and judges whether the project is ready to deploy, then deploys it to your
 own Render or Vercel and re-tests the URL that goes live. None of that is new on its own. What is
@@ -72,7 +72,7 @@ The third problem is the one AGENTIQ is built around.
 |---|---|
 | **Testing Agent** | Turns a URL and plain-English intent into executable test cases with multi-assertion checks (status, JSONPath, headers, body, response time). The LLM proposes assertions; code decides pass or fail, deterministically. |
 | **Spec grounding** | Import an OpenAPI 3.0 or 3.1 document and ground generation in an operation's declared parameters, schemas and status codes. |
-| **Security Agent** | Six probe families mapped to the OWASP API Security Top 10 (2023): SQL injection, reflected XSS, broken authentication, CORS, security headers, rate limiting. Every finding carries its payload, the signal that fired, and the baseline it deviated from. |
+| **Security Agent** | Eight probe families mapped to the OWASP API Security Top 10 (2023): SQL injection, reflected XSS, server-side request forgery, open redirect, broken authentication, CORS, security headers, rate limiting. Every finding carries its payload, the signal that fired, and the baseline it deviated from. |
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
 | **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
 | **Deployment Agent** | Read-only preflight against GitHub, then a deploy to **Render or Vercel using the user's own connected account**, then an automatic test and scan of the live URL, all recorded together. |
@@ -214,7 +214,7 @@ A single run tests one endpoint; an **assessment** takes a whole project end to 
 a local folder, a public or private GitHub repo, or a deployed URL, and AGENTIQ walks a persisted
 state machine: **discover** the routes from the source (an AST pass, no LLM), **test** every
 endpoint (it starts the app in the process sandbox, or targets the deployed URL, or, for a cloned
-repo, runs static-only because that code is untrusted), **scan** with the six probe families plus
+repo, runs static-only because that code is untrusted), **scan** with the eight probe families plus
 static secret, SAST, dependency and config analysis, then **judge readiness** and assemble a report
 with prioritised guidance: for each finding, why it matters, how to fix it, and concrete tips. A
 GitHub repo clones in the background, so the request never blocks: the project shows a live
@@ -281,16 +281,17 @@ observations: [docs/90_EVALUATION.md](docs/90_EVALUATION.md).
 
 ### Security detection
 
-48 labelled observations: 4 endpoints, on both apps, across all 6 families.
+96 labelled observations: 6 endpoints, on both apps, across all 8 families.
 
 | | True pos. | False pos. | False neg. | True neg. | Precision | Recall |
 |---|--:|--:|--:|--:|--:|--:|
-| **All 6 families** | 16 | **0** | 0 | 32 | **100%** | **100%** |
+| **All 8 families** | 23 | **0** | 1 | 72 | **100%** | **95.8%** |
 
-Zero findings on the hardened app, and the auth probe correctly stays quiet on the three
-endpoints declared public. Treat these as what they are: a small benchmark with defects that are
-meant to be detectable. They show the false-positive controls work; they are not a claim about
-arbitrary real-world APIs.
+Zero findings on the hardened app, and the auth probe correctly stays quiet on the five endpoints
+declared public. The one false negative is a rate-limiting check that stopped early when AGENTIQ's
+own per-host egress limiter throttled it: the rate family is an indicator, not a proof, and it says
+so. Treat these as what they are: a small benchmark with defects that are meant to be detectable.
+They show the false-positive controls work; they are not a claim about arbitrary real-world APIs.
 
 ### Test-generation adequacy
 

@@ -18,17 +18,19 @@ differing only in their defects (`fixtures/shared/data.js` is shared by both, an
 are otherwise the same, a finding on one and not the other can only be explained by the
 defect, which is what makes these numbers interpretable.
 
-Each of 4 endpoints was scanned on both apps across all 6 families, giving **48 labelled observations**.
+Each of 6 endpoints was scanned on both apps across all 8 families, giving **96 labelled observations**.
 
 | Family | TP | FP | FN | TN | Precision | Recall | F1 |
 | --- | --: | --: | --: | --: | --: | --: | --: |
-| `sqli` | 2 | 0 | 0 | 6 | 100.0% | 100.0% | 100.0% |
-| `xss` | 1 | 0 | 0 | 7 | 100.0% | 100.0% | 100.0% |
-| `auth` | 1 | 0 | 0 | 7 | 100.0% | 100.0% | 100.0% |
-| `cors` | 4 | 0 | 0 | 4 | 100.0% | 100.0% | 100.0% |
-| `headers` | 4 | 0 | 0 | 4 | 100.0% | 100.0% | 100.0% |
-| `rate` | 4 | 0 | 0 | 4 | 100.0% | 100.0% | 100.0% |
-| **overall** | **16** | **0** | **0** | **32** | **100.0%** | **100.0%** | **100.0%** |
+| `sqli` | 2 | 0 | 0 | 10 | 100.0% | 100.0% | 100.0% |
+| `xss` | 1 | 0 | 0 | 11 | 100.0% | 100.0% | 100.0% |
+| `ssrf` | 1 | 0 | 0 | 11 | 100.0% | 100.0% | 100.0% |
+| `redirect` | 1 | 0 | 0 | 11 | 100.0% | 100.0% | 100.0% |
+| `auth` | 1 | 0 | 0 | 11 | 100.0% | 100.0% | 100.0% |
+| `cors` | 6 | 0 | 0 | 6 | 100.0% | 100.0% | 100.0% |
+| `headers` | 6 | 0 | 0 | 6 | 100.0% | 100.0% | 100.0% |
+| `rate` | 5 | 0 | 1 | 6 | 100.0% | 83.3% | 90.9% |
+| **overall** | **23** | **0** | **1** | **72** | **100.0%** | **95.8%** | **97.9%** |
 
 ### False positives on the hardened application
 
@@ -37,10 +39,10 @@ therefore wrong, which makes this the honest counterweight to recall: a scanner 
 reported everything on everything would score 100% recall and be useless.
 
 **Measured false-positive rate: 0.0%**
-(0 finding(s) across 24 hardened observations)
+(0 finding(s) across 48 hardened observations)
 
 No false positives. The control that produces this result is the `intendedPublic`
-declaration: three of the four endpoints are meant to be reachable anonymously, so an
+declaration: 5 of the 6 endpoints are meant to be reachable anonymously, so an
 anonymous 200 there is correct behaviour rather than broken authentication. Without that
 declaration, every public endpoint would carry an auth finding.
 
