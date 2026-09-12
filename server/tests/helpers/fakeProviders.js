@@ -144,3 +144,45 @@ export function fakeGitHub({
 
   return { app, state };
 }
+
+/**
+ * A fake Vercel API covering the deployments endpoints the provider uses.
+ *
+ * @param {object} opts
+ * @param {string} opts.token       the bearer token it will accept
+ * @param {string[]} opts.statuses  readyState values returned in order by the
+ *                                  poll; the last one repeats
+ * @param {string} opts.url         the deployment url returned (no scheme, as
+ *                                  Vercel returns it)
+ */
+export function fakeVercel({
+  token = 'vercel_test_token_abc123', statuses = ['READY'], url = 'demo-api-abc.vercel.app',
+} = {}) {
+  const app = express();
+  app.use(express.json());
+  const state = { requests: [], deploys: new Map(), pollCount: 0, token, url };
+
+  app.use((req, res, next) => {
+    state.requests.push({
+      method: req.method, path: req.path, auth: req.get('authorization') ?? null, body: req.body,
+    });
+    if (req.get('authorization') !== `Bearer ${token}`) {
+      return res.status(403).json({ error: { message: 'Forbidden' } });
+    }
+    return next();
+  });
+
+  app.post('/v13/deployments', (req, res) => {
+    const id = `dpl_${state.deploys.size + 1}`;
+    state.deploys.set(id, { id, name: req.body?.name, gitSource: req.body?.gitSource });
+    res.status(200).json({ id, readyState: statuses[0], url: state.url, projectId: 'prj_fake' });
+  });
+
+  app.get('/v13/deployments/:id', (req, res) => {
+    const status = statuses[Math.min(state.pollCount, statuses.length - 1)];
+    state.pollCount += 1;
+    res.json({ id: req.params.id, readyState: status, url: state.url, projectId: 'prj_fake' });
+  });
+
+  return { app, state };
+}

@@ -2,20 +2,51 @@
  * The Vercel deployment provider.
  *
  * Vercel deploys are multi-tenant: they use the CURRENT user's connected Vercel
- * token (Settings -> Connections), never a shared key, which is why the platform
- * env fallback isConfigured() is always false here; the deploy route's per-user
- * gate lets a user through on their own connection. The connection is wired and
- * stored; the deploy() call against Vercel's API is a documented preview,
- * structured exactly like Render so filling it in needs no change to the agent
- * or the service.
+ * token (Settings -> Connections), never a shared key, so the platform env
+ * fallback isConfigured() is always false; the deploy route's per-user gate lets
+ * a user through on their own connection.
+ *
+ * The deploy triggers a Git deployment through Vercel's REST API: it asks Vercel
+ * to build the user's GitHub repo (their Vercel account must have the GitHub app
+ * installed on that repo), then polls readyState to READY or a terminal failure.
+ * Every request goes through fetchGuarded, so the same SSRF and rate rules apply.
+ * VERCEL_API_BASE is overridable so the tests drive a local fake control plane.
  */
+import { fetchGuarded } from '../mcp/egress.js';
+import { env } from '../config/env.js';
+import { getConnectionToken } from '../services/connections.service.js';
 import { detectRequirements } from './requirements.js';
 import { diagnoseFailure } from './diagnose.js';
+
+/** Overridable so tests can point at a local fake control plane. */
+export const VERCEL_API_BASE = () => env.VERCEL_API_BASE ?? 'https://api.vercel.com';
+
+const READY = new Set(['READY']);
+const FAILED = new Set(['ERROR', 'CANCELED', 'DELETED']);
+const defaultSleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
+/** owner/name from a GitHub URL or an owner/name string. */
+export function ownerRepo(repo) {
+  const m = String(repo).match(/github\.com\/([^/]+)\/([^/.\s]+)/i);
+  return m ? `${m[1]}/${m[2]}` : String(repo).replace(/\.git$/, '');
+}
+
+/** One Vercel API call through the egress guard. Returns { status, json }. */
+async function vercelApi(url, { method = 'GET', body, token } = {}) {
+  const res = await fetchGuarded(url, {
+    method,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  let json = null;
+  try { json = res.body ? JSON.parse(res.body) : null; } catch { /* non-json body */ }
+  return { status: res.status, json };
+}
 
 export const vercelProvider = {
   name: 'vercel',
   displayName: 'Vercel',
-  status: 'stub',
+  status: 'available',
   requiresCredential: 'Vercel connection',
   // No platform env fallback: a user connects their own token in Settings.
   isConfigured: () => false,
@@ -24,33 +55,83 @@ export const vercelProvider = {
   diagnoseFailure,
 
   async preflight(input) {
+    const repo = ownerRepo(input.repo);
     return {
       checks: [{
         name: 'provider',
-        status: 'warn',
-        detail: 'The Vercel provider is in preview: it validates the request, and your Vercel '
-          + 'connection is saved and ready, but the deploy call is not wired yet.',
+        status: 'ok',
+        detail: `Will deploy ${repo} to your connected Vercel account. Vercel must have access to the repo (its GitHub app installed).`,
       }],
       ok: true,
       needsGrant: false,
-      parsed: { repo: input.repo, serviceName: input.serviceName },
+      parsed: { repo, serviceName: input.serviceName },
     };
   },
 
-  async deploy(input) {
+  async deploy(input, deps = {}) {
+    const { context = {}, sleep = defaultSleep, pollIntervalMs = 4000, maxPolls = 40 } = deps;
+    const base = (input.baseUrl ?? VERCEL_API_BASE()).replace(/\/+$/, '');
+
+    const token = context.userId
+      ? await getConnectionToken({ userId: context.userId, provider: 'vercel' }).catch(() => null)
+      : null;
+    if (!token) {
+      throw Object.assign(
+        new Error('Connect your Vercel account in Settings before deploying to Vercel.'),
+        { code: 'DEPLOY_NOT_CONFIGURED' },
+      );
+    }
+
+    const repo = ownerRepo(input.repo);
+    const ref = input.branch ?? 'main';
+    const name = input.serviceName ?? repo.split('/')[1] ?? 'app';
+
+    if (input.dryRun) {
+      return {
+        ok: true, dryRun: true, serviceId: null, deployId: null, liveUrl: null, deployStatus: null,
+        steps: [{ action: 'dry-run', message: `Would deploy ${repo}@${ref} to Vercel as ${name}`, at: new Date() }],
+        message: `Dry run: would create a Vercel deployment for ${repo}.`,
+        wouldSend: { provider: 'vercel', repo, ref, name },
+      };
+    }
+
+    const steps = [];
+
+    // 1. Trigger a git deployment.
+    const create = await vercelApi(`${base}/v13/deployments`, {
+      method: 'POST', token,
+      body: { name, gitSource: { type: 'github', repo, ref } },
+    });
+    if (create.status >= 400 || !create.json?.id) {
+      const msg = create.json?.error?.message ?? `Vercel rejected the deployment (HTTP ${create.status}).`;
+      throw Object.assign(new Error(msg), { code: 'VERCEL_DEPLOY_FAILED' });
+    }
+    const deployId = create.json.id;
+    steps.push({ action: 'create', message: `Vercel deployment ${deployId} created`, at: new Date() });
+
+    // 2. Poll readyState until it settles.
+    let status = create.json.readyState ?? 'QUEUED';
+    let url = create.json.url ?? null;
+    for (let i = 0; i < maxPolls && !READY.has(status) && !FAILED.has(status); i += 1) {
+      await sleep(pollIntervalMs);
+      const poll = await vercelApi(`${base}/v13/deployments/${encodeURIComponent(deployId)}`, { token });
+      status = poll.json?.readyState ?? status;
+      url = poll.json?.url ?? url;
+    }
+
+    const ok = READY.has(status);
+    steps.push({ action: 'poll', message: `Vercel deployment ${status}`, at: new Date() });
+    const liveUrl = url ? (url.startsWith('http') ? url : `https://${url}`) : null;
+
     return {
-      dryRun: true,
-      ok: false,
-      notImplemented: true,
-      steps: [{ action: 'stub', message: 'Vercel provider is in preview.', at: new Date() }],
-      serviceId: null,
-      deployId: null,
-      liveUrl: null,
-      deployStatus: null,
-      message:
-        'The Vercel provider is in preview. Your Vercel token is connected and stored; wiring '
-        + 'deploy() to the Vercel API is the next step, structured exactly like the Render provider.',
-      wouldSend: { provider: 'vercel', repo: input.repo, serviceName: input.serviceName },
+      ok,
+      dryRun: false,
+      serviceId: create.json.projectId ?? null,
+      deployId,
+      liveUrl,
+      deployStatus: status,
+      steps,
+      message: ok ? `Deployed to Vercel: ${liveUrl}` : `Vercel deployment ended in state ${status}.`,
     };
   },
 };
