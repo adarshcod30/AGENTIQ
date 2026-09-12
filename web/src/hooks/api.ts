@@ -262,8 +262,10 @@ export const useProjects = () => useQuery({
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; workspaceRoot: string; runtimeEnv?: Record<string, string> }) =>
-      apiPost<{ project: Project }>('/projects', input),
+    mutationFn: (input: {
+      name: string; workspaceRoot?: string; targetUrl?: string;
+      runtimeEnv?: Record<string, string>; startScript?: string;
+    }) => apiPost<{ project: Project }>('/projects', input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   });
 }
@@ -274,12 +276,13 @@ export function useUpdateProjectEnv() {
   return useMutation({
     // Each field is sent only when provided, so saving env does not clear the
     // start script and vice versa. An empty startScript string clears it.
-    mutationFn: (vars: { id: string; runtimeEnv?: Record<string, string>; startScript?: string }) =>
-      apiPatch<{ id: string; runtimeEnvKeys: string[]; startScript: string | null }>(
+    mutationFn: (vars: { id: string; runtimeEnv?: Record<string, string>; startScript?: string; targetUrl?: string }) =>
+      apiPatch<{ id: string; runtimeEnvKeys: string[]; startScript: string | null; targetUrl: string | null }>(
         `/projects/${vars.id}/env`,
         {
           ...(vars.runtimeEnv !== undefined ? { runtimeEnv: vars.runtimeEnv } : {}),
           ...(vars.startScript !== undefined ? { startScript: vars.startScript } : {}),
+          ...(vars.targetUrl !== undefined ? { targetUrl: vars.targetUrl } : {}),
         },
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),

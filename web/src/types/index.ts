@@ -243,7 +243,10 @@ export interface Project {
   id: string;
   _id?: string;
   name: string;
-  workspaceRoot: string;
+  /** Local folder path. Null for a URL-only project. */
+  workspaceRoot: string | null;
+  /** Deployed base URL to assess. Null for a folder-only project. */
+  targetUrl?: string | null;
   lastDiscoveryAt: string | null;
   /** Names only of the opt-in runtime env; values never leave the server. */
   runtimeEnvKeys?: string[];

@@ -16,8 +16,21 @@ const projectSchema = new mongoose.Schema({
 
   name: { type: String, required: true, trim: true, maxlength: 120 },
 
-  /** Canonical absolute path to the workspace root (realpath, set by the jail). */
-  workspaceRoot: { type: String, required: true },
+  /**
+   * Canonical absolute path to the workspace root (realpath, set by the jail).
+   * Optional: a project can instead be a deployed URL with no local source, in
+   * which case discovery and the static scans are skipped and only the live
+   * security scan runs.
+   */
+  workspaceRoot: { type: String },
+
+  /**
+   * A deployed base URL to assess, e.g. https://my-app.vercel.app. When set, the
+   * assessment points its security scan at this live URL instead of starting the
+   * app locally, and skips functional tests so it never changes live data.
+   * Validated as a public http(s) URL at creation (the egress guard's rules).
+   */
+  targetUrl: { type: String, default: undefined, trim: true },
 
   /** When discovery last ran, for the project list. Null until first discovery. */
   lastDiscoveryAt: { type: Date, default: null },
@@ -44,10 +57,26 @@ const projectSchema = new mongoose.Schema({
 
 projectSchema.index({ userId: 1, createdAt: -1 });
 
+/** A project must point at something: a local folder, a deployed URL, or both. */
+projectSchema.pre('validate', function requireTarget() {
+  if (!this.workspaceRoot && !this.targetUrl) {
+    this.invalidate('workspaceRoot', 'A project needs a workspace folder or a deployed URL');
+  }
+});
+
 /** Never leak internals the client does not need. */
 projectSchema.methods.toJSON = function toJSON() {
-  const { _id, name, workspaceRoot, startScript, lastDiscoveryAt, createdAt, updatedAt } = this;
-  return { id: _id, name, workspaceRoot, startScript: startScript ?? null, lastDiscoveryAt, createdAt, updatedAt };
+  const { _id, name, workspaceRoot, targetUrl, startScript, lastDiscoveryAt, createdAt, updatedAt } = this;
+  return {
+    id: _id,
+    name,
+    workspaceRoot: workspaceRoot ?? null,
+    targetUrl: targetUrl ?? null,
+    startScript: startScript ?? null,
+    lastDiscoveryAt,
+    createdAt,
+    updatedAt,
+  };
 };
 
 export const Project = mongoose.models.Project ?? mongoose.model('Project', projectSchema);

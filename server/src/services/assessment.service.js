@@ -125,8 +125,51 @@ async function phaseDiscover(assessment, project, ctx, deps) {
   return { model, discovery };
 }
 
-async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null }) {
+/**
+ * URL-only projects have no source to read, so there is nothing to discover.
+ * Record an empty discovery and pass through DISCOVERING for the timeline; the
+ * security scan against the live URL is where a URL-only assessment does its work.
+ */
+async function phaseDiscoverUrlOnly(assessment, project) {
+  await transition(assessment, S.DISCOVERING, 'no local source; assessing the deployed URL');
+  const model = {
+    framework: 'unknown', frameworkSignals: [], endpoints: [], endpointCount: 0,
+    dependencies: [], scripts: {}, config: {},
+    stats: { filesScanned: 0, filesWithRoutes: 0, routesFound: 0, parseErrors: 0 },
+  };
+  const discovery = await Discovery.create({ projectId: project._id, userId: assessment.userId, ...model });
+  assessment.discoveryId = discovery._id;
+  await assessment.save();
+  return model;
+}
+
+async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null, targetUrl = null }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
+
+  // A deployed target: never start anything locally, and never run the functional
+  // suite against a live app (a POST or DELETE test could change real data). Point
+  // the security scan at the live URL and record endpoints as discovered, not tested.
+  if (targetUrl) {
+    assessment.baseUrl = targetUrl;
+    try {
+      grantStore.grant({
+        userId: String(assessment.userId), sessionId: ctx.sessionId,
+        riskClass: RISK_CLASS.NETWORK_READ, host: new URL(targetUrl).host,
+      });
+    } catch { /* the URL was validated at project creation */ }
+    assessment.security.notes.push(
+      'Assessing a deployed URL: the app was not started locally, and functional endpoint tests '
+      + 'were skipped so the live app is never sent test writes. Security probes ran against the live URL.',
+    );
+    for (const endpoint of (model.endpoints ?? []).slice(0, MAX_ENDPOINTS)) {
+      assessment.endpoints.push({
+        method: endpoint.method, path: endpoint.path, intent: null, confidence: null,
+        status: 'skipped', note: 'live deployment', passed: 0, failed: 0, errored: 0,
+      });
+    }
+    await assessment.save();
+    return { paused: false };
+  }
 
   // A project that will not start in a scrubbed sandbox (a monorepo dev script,
   // a hardcoded port, a database dependency, uninstalled root packages) must not
@@ -201,12 +244,13 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
   return { paused: false };
 }
 
-async function phaseScan(assessment, model, ctx, deps) {
+async function phaseScan(assessment, model, ctx, deps, { runStatic = true } = {}) {
   await transition(assessment, S.SCANNING, 'running the security assessment');
   const security = await deps.securityAssess({
     url: assessment.baseUrl ?? null,
     method: 'GET',
     intendedPublic: false,
+    runStatic,
     runTool: ctx.runTool,
     context: ctx.context,
   });
@@ -254,14 +298,23 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
   if (!project) return finishFailed(assessment, new AssessmentError('Project gone', 'PROJECT_GONE', 409));
   const runtimeEnv = project.runtimeEnv ? Object.fromEntries(project.runtimeEnv) : null;
   const startScript = project.startScript ?? null;
+  const targetUrl = project.targetUrl ?? null;
+  const hasSource = Boolean(project.workspaceRoot);
 
-  let jail;
-  try {
-    jail = createJail(project.workspaceRoot);
-  } catch {
-    return finishFailed(assessment, new AssessmentError('Workspace unavailable', 'WORKSPACE_GONE', 409));
+  // A source folder means a filesystem jail. A URL-only project has none, and the
+  // fs tools are simply never reached on that path (discovery and static scans are
+  // skipped), so the context carries a null workspace root.
+  let jail = null;
+  if (hasSource) {
+    try {
+      jail = createJail(project.workspaceRoot);
+    } catch {
+      return finishFailed(assessment, new AssessmentError('Workspace unavailable', 'WORKSPACE_GONE', 409));
+    }
+  } else if (!targetUrl) {
+    return finishFailed(assessment, new AssessmentError('Project has neither a folder nor a URL', 'NO_TARGET', 409));
   }
-  const context = { userId: String(assessment.userId), sessionId: `assessment:${assessmentId}`, workspaceRoot: jail.root };
+  const context = { userId: String(assessment.userId), sessionId: `assessment:${assessmentId}`, workspaceRoot: jail?.root ?? null };
   const ctx = { context, sessionId: context.sessionId, runTool: makeRunTool(context) };
 
   try {
@@ -270,20 +323,23 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
       : null;
 
     if (before(assessment.state, S.TESTING)) {
-      ({ model } = await phaseDiscover(assessment, project, ctx, deps));
+      model = hasSource
+        ? (await phaseDiscover(assessment, project, ctx, deps)).model
+        : await phaseDiscoverUrlOnly(assessment, project);
     }
     if (before(assessment.state, S.SCANNING)) {
-      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv, startScript });
+      const { paused } = await phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv, startScript, targetUrl });
       if (paused) return assessment; // waits for an answer
     }
-    if (before(assessment.state, S.ANALYZING)) await phaseScan(assessment, model, ctx, deps);
+    if (before(assessment.state, S.ANALYZING)) await phaseScan(assessment, model, ctx, deps, { runStatic: hasSource });
     if (before(assessment.state, S.REPORTING)) await phaseAnalyze(assessment);
     if (before(assessment.state, S.COMPLETE)) await phaseReport(assessment, model);
 
-    await deps.stopApp(ctx.runTool, context);
+    // Nothing was started for a deployed target, so there is nothing to stop.
+    if (!targetUrl) await deps.stopApp(ctx.runTool, context);
     return assessment;
   } catch (err) {
-    await deps.stopApp(ctx.runTool, context).catch(() => {});
+    if (!targetUrl) await deps.stopApp(ctx.runTool, context).catch(() => {});
     return finishFailed(assessment, err);
   }
 }

@@ -11,6 +11,7 @@
  * with a clear error before any project row is written.
  */
 import { createJail, FsJailError } from '../mcp/fsJail.js';
+import { validateUrl, EgressError } from '../mcp/egress.js';
 import { getTool } from '../mcp/registry.js';
 import { runDiscoveryAgent } from '../agents/discovery.agent.js';
 import { Project } from '../models/Project.js';
@@ -32,18 +33,38 @@ export class DiscoveryError extends Error {
  * its canonical realpath, which is what we store, so later tool calls are bound
  * to a root that cannot move under a symlink.
  */
-export async function createProject({ userId, name, workspaceRoot, runtimeEnv }) {
-  let jail;
-  try {
-    jail = createJail(workspaceRoot);
-  } catch (err) {
-    if (err instanceof FsJailError) {
-      throw new DiscoveryError(err.message, 'INVALID_WORKSPACE', 400);
+export async function createProject({ userId, name, workspaceRoot, targetUrl, runtimeEnv, startScript }) {
+  let root;
+  if (workspaceRoot) {
+    try {
+      root = createJail(workspaceRoot).root;
+    } catch (err) {
+      if (err instanceof FsJailError) throw new DiscoveryError(err.message, 'INVALID_WORKSPACE', 400);
+      throw err;
     }
-    throw err;
+  }
+  let url;
+  if (targetUrl) {
+    try {
+      // The same guard the probes use: rejects a bad scheme and, outside dev,
+      // an internal host, so a project can never be pointed at the metadata IP.
+      url = validateUrl(targetUrl).toString();
+    } catch (err) {
+      if (err instanceof EgressError) throw new DiscoveryError(`That deployed URL cannot be used: ${err.message}`, 'INVALID_TARGET_URL', 400);
+      throw err;
+    }
+  }
+  if (!root && !url) {
+    throw new DiscoveryError('Provide a project folder or a deployed URL', 'NO_TARGET', 400);
   }
   const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
-  return Project.create({ userId, name, workspaceRoot: jail.root, ...(hasEnv ? { runtimeEnv } : {}) });
+  return Project.create({
+    userId, name,
+    ...(root ? { workspaceRoot: root } : {}),
+    ...(url ? { targetUrl: url } : {}),
+    ...(hasEnv ? { runtimeEnv } : {}),
+    ...(startScript && startScript.trim() ? { startScript: startScript.trim() } : {}),
+  });
 }
 
 /**
@@ -53,7 +74,7 @@ export async function createProject({ userId, name, workspaceRoot, runtimeEnv })
  * saving env does not wipe the start script and vice versa. Returns the env key
  * NAMES only, never the values, so the secrets never travel back out.
  */
-export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScript }) {
+export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScript, targetUrl }) {
   const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
   if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
   if (runtimeEnv !== undefined) {
@@ -64,9 +85,26 @@ export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScr
     const trimmed = typeof startScript === 'string' ? startScript.trim() : '';
     project.startScript = trimmed ? trimmed : undefined;
   }
+  if (targetUrl !== undefined) {
+    const t = typeof targetUrl === 'string' ? targetUrl.trim() : '';
+    if (t) {
+      try {
+        project.targetUrl = validateUrl(t).toString();
+      } catch (err) {
+        if (err instanceof EgressError) throw new DiscoveryError(`That deployed URL cannot be used: ${err.message}`, 'INVALID_TARGET_URL', 400);
+        throw err;
+      }
+    } else {
+      if (!project.workspaceRoot) throw new DiscoveryError('Cannot remove the URL: the project has no folder to fall back on', 'NO_TARGET', 400);
+      project.targetUrl = undefined;
+    }
+  }
   await project.save();
   const keys = project.runtimeEnv ? [...project.runtimeEnv.keys()] : [];
-  return { id: project._id, runtimeEnvKeys: keys, startScript: project.startScript ?? null };
+  return {
+    id: project._id, runtimeEnvKeys: keys,
+    startScript: project.startScript ?? null, targetUrl: project.targetUrl ?? null,
+  };
 }
 
 /** The tool runner, carrying the project workspace so fs tools stay in the jail. */
@@ -82,6 +120,14 @@ function toolRunner(context) {
 export async function discoverProject({ userId, projectId, sessionId = 'discovery' }) {
   const project = await Project.findOne({ _id: projectId, userId });
   if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
+
+  // A URL-only project has no source to read: discovery is a folder operation.
+  if (!project.workspaceRoot) {
+    throw new DiscoveryError(
+      'This project has no local source to discover; it is assessed by its deployed URL.',
+      'NO_SOURCE', 400,
+    );
+  }
 
   // Re-create the jail from the stored root. If the directory has since been
   // moved or deleted, fail clearly rather than half-discovering nothing.

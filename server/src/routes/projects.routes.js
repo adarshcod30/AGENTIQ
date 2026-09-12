@@ -17,11 +17,20 @@ const router = Router();
 
 /** Opt-in runtime env for the app under test: a map of KEY -> value, local only. */
 const runtimeEnvSchema = z.record(z.string(), z.string()).optional();
+/** The npm script that starts the app under test. A name, never a shell command. */
+const startScriptSchema = z.string().trim().max(60).optional();
+/** A deployed base URL to assess, instead of or alongside a local folder. */
+const targetUrlSchema = z.string().trim().url({ error: 'Enter a full http(s) URL' }).optional();
 
 const createSchema = z.object({
   name: z.string().trim().min(1, { error: 'A project name is required' }).max(120),
-  workspaceRoot: z.string().min(1, { error: 'The path to the project folder is required' }),
+  workspaceRoot: z.string().trim().min(1).optional(),
+  targetUrl: targetUrlSchema,
   runtimeEnv: runtimeEnvSchema,
+  startScript: startScriptSchema,
+}).refine((d) => d.workspaceRoot || d.targetUrl, {
+  error: 'Provide a project folder path or a deployed URL',
+  path: ['workspaceRoot'],
 });
 
 /** Maps a DiscoveryError to its HTTP status; anything else is a real 500. */
@@ -51,24 +60,22 @@ router.get('/', protectRoute, async (req, res) => {
   return ok(res, { projects: projects.map((p) => ({ id: p._id, ...p })) });
 });
 
-/** The npm script that starts the app under test. A name, never a shell command. */
-const startScriptSchema = z.string().trim().max(60).optional();
-
 /**
- * Update the opt-in runtime config for the app under test: its environment and
- * the start script. Owner-scoped. A field left out is left unchanged, so the UI
- * can save the env without clearing the start script.
+ * Update the opt-in runtime config for the app under test: its environment, the
+ * start script, and the deployed URL. Owner-scoped. A field left out is left
+ * unchanged, so the UI can save the env without clearing the start script.
  */
 router.patch('/:id/env', protectRoute, async (req, res) => {
-  const parsed = z.object({ runtimeEnv: runtimeEnvSchema, startScript: startScriptSchema })
-    .safeParse(req.body ?? {});
+  const parsed = z.object({
+    runtimeEnv: runtimeEnvSchema, startScript: startScriptSchema, targetUrl: z.string().trim().optional(),
+  }).safeParse(req.body ?? {});
   if (!parsed.success) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Provide runtimeEnv as a map of string keys to string values, and startScript as a script name');
+    return fail(res, 400, 'VALIDATION_ERROR', 'Provide runtimeEnv as a map of string keys to string values, startScript as a script name, and targetUrl as a URL');
   }
   try {
     const result = await updateProjectEnv({
       userId: req.user._id, projectId: req.params.id,
-      runtimeEnv: parsed.data.runtimeEnv, startScript: parsed.data.startScript,
+      runtimeEnv: parsed.data.runtimeEnv, startScript: parsed.data.startScript, targetUrl: parsed.data.targetUrl,
     });
     return ok(res, result);
   } catch (err) {

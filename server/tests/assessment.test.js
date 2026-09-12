@@ -146,6 +146,48 @@ describe('runAssessment (stubbed pipeline)', () => {
     expect(done.error.message).toContain('scanner blew up');
     expect(done.endpoints).toHaveLength(2); // testing results are kept
   });
+
+  it('assesses a deployed URL: no local start, security points at the live URL, static skipped', async () => {
+    const targetUrl = 'https://demo-app.example.com/';
+    const project = await Project.create({ userId, name: 'Deployed', targetUrl });
+    const created = await createAssessment({ userId, projectId: project._id, schedule: false });
+
+    let scanArgs = null;
+    const deps = {
+      ...stubDeps(),
+      securityAssess: async (args) => { scanArgs = args; return { findings: [], summary: { total: 0, bySeverity: {} }, notes: [] }; },
+    };
+    const done = await runAssessment({ assessmentId: created._id, deps });
+
+    expect(done.state).toBe(ASSESS_STATE.COMPLETE);
+    expect(done.baseUrl).toBe(targetUrl);
+    // No source: the security scan pointed at the live URL and static scans were off.
+    expect(scanArgs.url).toBe(targetUrl);
+    expect(scanArgs.runStatic).toBe(false);
+    expect(done.security.notes.some((n) => /deployed URL/i.test(n))).toBe(true);
+  });
+
+  it('with a folder AND a URL, never runs functional tests on the live app but still scans the source', async () => {
+    const targetUrl = 'https://demo-app.example.com/';
+    const project = await Project.create({ userId, name: 'Both', workspaceRoot: VULN, targetUrl });
+    const created = await createAssessment({ userId, projectId: project._id, schedule: false });
+
+    let scanArgs = null;
+    let functionalCalls = 0;
+    const deps = {
+      ...stubDeps(),
+      testEndpoint: async () => { functionalCalls += 1; return { summary: { passed: 1, failed: 0, errored: 0 }, functional: [], generation: {} }; },
+      securityAssess: async (args) => { scanArgs = args; return { findings: [], summary: { total: 0, bySeverity: {} }, notes: [] }; },
+    };
+    const done = await runAssessment({ assessmentId: created._id, deps });
+
+    expect(done.state).toBe(ASSESS_STATE.COMPLETE);
+    expect(done.baseUrl).toBe(targetUrl);
+    expect(functionalCalls).toBe(0); // the live app is never sent test writes
+    expect(done.endpoints).toHaveLength(2);
+    expect(done.endpoints.every((e) => e.status === 'skipped')).toBe(true);
+    expect(scanArgs.runStatic).toBe(true); // source present, static scans ran
+  });
 });
 
 describe('report service', () => {
