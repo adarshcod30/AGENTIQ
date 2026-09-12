@@ -71,6 +71,8 @@ The third problem is the one AGENTIQ is built around.
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
 | **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
 | **Deployment Agent** | Read-only preflight against GitHub, a Render deploy, then an automatic test and scan of the live URL, all recorded together. |
+| **Autonomous assessment** | Register a project as a local folder, a public GitHub repo (cloned and statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
+| **Live testing** | When an app needs environment variables to boot, provide them (stored server-side, never returned) and re-run, so its endpoints are tested against the running app. A deployed URL or a cloned repo is never sent test writes. |
 | **Trust pages** | A Tool Registry that renders live JSON Schemas from the server, and an Audit Log where denied and SSRF-blocked calls stand out. |
 | **Real dashboard** | Every figure is a MongoDB aggregation over your own runs. A new account shows honest zeros. |
 | **Evaluation harness** | `npm run evaluate` measures precision and recall on labelled fixture apps, a mutation score for generated suites, and a grounding ablation. |
