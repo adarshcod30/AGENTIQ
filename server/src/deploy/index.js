@@ -15,10 +15,12 @@
  *   deploy(input, deps) -> { ok, dryRun, serviceId, deployId, liveUrl, deployStatus, steps, message }
  */
 import { renderProvider } from './render.provider.js';
+import { vercelProvider } from './vercel.provider.js';
 import { railwayProvider } from './railway.provider.js';
 
 export const PROVIDERS = {
   [renderProvider.name]: renderProvider,
+  [vercelProvider.name]: vercelProvider,
   [railwayProvider.name]: railwayProvider,
 };
 
