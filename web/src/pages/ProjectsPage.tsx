@@ -180,6 +180,15 @@ export function ProjectsPage() {
                   {p.repoUrl && (
                     <Chip className="bg-surface-3 text-ink-muted">github</Chip>
                   )}
+                  {p.cloneStatus === 'cloning' && (
+                    <Chip className="bg-info-50 text-info">
+                      <span aria-hidden className="size-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      cloning…
+                    </Chip>
+                  )}
+                  {p.cloneStatus === 'failed' && (
+                    <Chip className="bg-danger-50 text-danger">clone failed</Chip>
+                  )}
                   {p.targetUrl && (
                     <Chip className="bg-info-50 text-info">deployed</Chip>
                   )}
@@ -195,10 +204,15 @@ export function ProjectsPage() {
                     onClick={() => { setEditEnvFor(editEnvFor === p.id ? null : p.id); setEditEnvText(''); }}>
                     <KeyRound size={14} aria-hidden /> Env
                   </Button>
-                  <Button size="sm" loading={runAssessment.isPending} onClick={() => void start(p.id)}>
+                  <Button size="sm" loading={runAssessment.isPending}
+                    disabled={p.cloneStatus === 'cloning' || p.cloneStatus === 'failed'}
+                    onClick={() => void start(p.id)}>
                     <Play size={15} aria-hidden /> Run assessment
                   </Button>
                 </div>
+                {p.cloneStatus === 'failed' && p.cloneError && (
+                  <p className="t-small mt-2 text-danger">Clone failed: {p.cloneError}</p>
+                )}
                 {editEnvFor === p.id && (
                   <div className="mt-3 space-y-2 rounded-[6px] border border-line bg-surface-2 p-3">
                     <p className="t-small text-ink-muted">

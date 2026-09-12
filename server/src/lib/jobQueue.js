@@ -44,3 +44,7 @@ export class JobQueue {
 
 /** The shared queue for assessment jobs. */
 export const assessmentQueue = new JobQueue({ concurrency: 2 });
+
+/** A separate queue for GitHub clone jobs, so clones and assessments do not
+ *  compete for the same slots. */
+export const cloneQueue = new JobQueue({ concurrency: 2 });

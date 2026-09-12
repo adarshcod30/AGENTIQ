@@ -370,6 +370,12 @@ export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseO
 export async function createAssessment({ userId, projectId, pauseOnClarification = false, schedule = true }) {
   const project = await Project.findOne({ _id: projectId, userId });
   if (!project) throw new AssessmentError('Project not found', 'NOT_FOUND', 404);
+  if (project.cloneStatus === 'cloning') {
+    throw new AssessmentError('The repository is still being cloned. Try again in a moment.', 'CLONE_IN_PROGRESS', 409);
+  }
+  if (project.cloneStatus === 'failed') {
+    throw new AssessmentError(`The repository could not be cloned: ${project.cloneError ?? 'unknown error'}`, 'CLONE_FAILED', 409);
+  }
 
   const assessment = await Assessment.create({
     userId, projectId, state: S.PENDING,

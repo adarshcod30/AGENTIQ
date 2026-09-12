@@ -257,6 +257,11 @@ export function useRetryDeploy() {
 export const useProjects = () => useQuery({
   queryKey: ['projects'],
   queryFn: () => apiGet<{ projects: Project[] }>('/projects'),
+  // While a GitHub repo is cloning in the background, poll so the status flips to
+  // ready (or failed) on its own, without the user refreshing.
+  refetchInterval: (query) => (
+    query.state.data?.projects?.some((p) => p.cloneStatus === 'cloning') ? 2000 : false
+  ),
 });
 
 export function useCreateProject() {

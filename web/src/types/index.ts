@@ -251,6 +251,10 @@ export interface Project {
   repoUrl?: string | null;
   /** False when the code is external (a cloned repo): it is never started. */
   trusted?: boolean;
+  /** For a GitHub project: the state of its background clone. */
+  cloneStatus?: 'ready' | 'cloning' | 'failed';
+  /** Why the clone failed, when cloneStatus is 'failed'. */
+  cloneError?: string | null;
   lastDiscoveryAt: string | null;
   /** Names only of the opt-in runtime env; values never leave the server. */
   runtimeEnvKeys?: string[];

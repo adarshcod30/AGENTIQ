@@ -12,7 +12,8 @@
  */
 import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
-import { cloneRepo, GitError } from './git.service.js';
+import { cloneRepo, normalizeGithubUrl, GitError } from './git.service.js';
+import { cloneQueue } from '../lib/jobQueue.js';
 import { getTool } from '../mcp/registry.js';
 import { runDiscoveryAgent } from '../agents/discovery.agent.js';
 import { Project } from '../models/Project.js';
@@ -34,10 +35,11 @@ export class DiscoveryError extends Error {
  * its canonical realpath, which is what we store, so later tool calls are bound
  * to a root that cannot move under a symlink.
  */
-export async function createProject({ userId, name, workspaceRoot, targetUrl, repoUrl, runtimeEnv, startScript }) {
+export async function createProject({
+  userId, name, workspaceRoot, targetUrl, repoUrl, runtimeEnv, startScript, scheduleClone = true,
+}) {
   let root;
-  let trusted = true;
-  let clonedFrom = null;
+  let normalizedRepo = null; // a GitHub project: validated now, cloned in the background
   if (workspaceRoot) {
     try {
       root = createJail(workspaceRoot).root;
@@ -46,13 +48,11 @@ export async function createProject({ userId, name, workspaceRoot, targetUrl, re
       throw err;
     }
   } else if (repoUrl) {
-    // Clone the public repo into a jailed workspace. Cloned code is UNTRUSTED, so
-    // the project is marked trusted:false and the assessment never starts it.
+    // Validate the URL now (cheap, no network) so a bad URL fails the request
+    // immediately. The clone itself runs in the background: the project starts
+    // in 'cloning' and flips to 'ready' or 'failed' when the job finishes.
     try {
-      const cloned = await cloneRepo({ url: repoUrl });
-      root = cloned.path;
-      clonedFrom = cloned.repoUrl;
-      trusted = false;
+      normalizedRepo = normalizeGithubUrl(repoUrl);
     } catch (err) {
       if (err instanceof GitError) throw new DiscoveryError(err.message, err.code, 400);
       throw err;
@@ -69,18 +69,47 @@ export async function createProject({ userId, name, workspaceRoot, targetUrl, re
       throw err;
     }
   }
-  if (!root && !url) {
+  if (!root && !url && !normalizedRepo) {
     throw new DiscoveryError('Provide a project folder, a deployed URL, or a GitHub repo', 'NO_TARGET', 400);
   }
   const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
-  return Project.create({
-    userId, name, trusted,
+  const cloning = Boolean(normalizedRepo && !root); // a repo with no local folder yet
+  const project = await Project.create({
+    userId, name,
+    trusted: !cloning, // cloned code is untrusted; a folder or URL project is trusted
     ...(root ? { workspaceRoot: root } : {}),
     ...(url ? { targetUrl: url } : {}),
-    ...(clonedFrom ? { repoUrl: clonedFrom } : {}),
+    ...(normalizedRepo ? { repoUrl: normalizedRepo } : {}),
+    ...(cloning ? { cloneStatus: 'cloning' } : {}),
     ...(hasEnv ? { runtimeEnv } : {}),
     ...(startScript && startScript.trim() ? { startScript: startScript.trim() } : {}),
   });
+  if (cloning && scheduleClone) {
+    cloneQueue.enqueue(() => runCloneJob({ projectId: project._id, repoUrl: normalizedRepo })
+      .catch((err) => logger.error({ err: err.message }, 'clone job crashed')));
+  }
+  return project;
+}
+
+/**
+ * Runs a project's background clone. On success the workspace becomes available
+ * and the project flips to 'ready'; on failure it flips to 'failed' with the
+ * reason, so the UI shows it instead of the project hanging. `clone` is
+ * injectable so tests can drive both paths without touching the network.
+ */
+export async function runCloneJob({ projectId, repoUrl, clone = cloneRepo }) {
+  try {
+    const cloned = await clone({ url: repoUrl });
+    await Project.updateOne(
+      { _id: projectId },
+      { $set: { workspaceRoot: cloned.path, cloneStatus: 'ready' }, $unset: { cloneError: '' } },
+    );
+    logger.info({ projectId: String(projectId) }, 'clone complete');
+  } catch (err) {
+    const message = err instanceof GitError ? err.message : (err.message ?? 'clone failed');
+    await Project.updateOne({ _id: projectId }, { $set: { cloneStatus: 'failed', cloneError: message } });
+    logger.warn({ projectId: String(projectId), err: message }, 'clone job failed');
+  }
 }
 
 /**

@@ -64,21 +64,31 @@ const projectSchema = new mongoose.Schema({
    * scans only. Defaults true for a folder the user pointed at themselves.
    */
   trusted: { type: Boolean, default: true },
+
+  /**
+   * For a GitHub project, the state of its background clone: 'cloning' while the
+   * repo is being fetched, 'ready' once its workspace is available, 'failed' if
+   * the clone did not complete (cloneError says why). Folder and URL projects are
+   * 'ready' from creation.
+   */
+  cloneStatus: { type: String, enum: ['ready', 'cloning', 'failed'], default: 'ready' },
+  cloneError: { type: String, default: undefined },
 }, { timestamps: true });
 
 projectSchema.index({ userId: 1, createdAt: -1 });
 
 /** A project must point at something: a local folder, a deployed URL, or both. */
 projectSchema.pre('validate', function requireTarget() {
-  if (!this.workspaceRoot && !this.targetUrl) {
-    this.invalidate('workspaceRoot', 'A project needs a workspace folder or a deployed URL');
+  if (!this.workspaceRoot && !this.targetUrl && !this.repoUrl) {
+    this.invalidate('workspaceRoot', 'A project needs a workspace folder, a deployed URL, or a GitHub repo');
   }
 });
 
 /** Never leak internals the client does not need. */
 projectSchema.methods.toJSON = function toJSON() {
   const {
-    _id, name, workspaceRoot, targetUrl, repoUrl, trusted, startScript, lastDiscoveryAt, createdAt, updatedAt,
+    _id, name, workspaceRoot, targetUrl, repoUrl, trusted, cloneStatus, cloneError,
+    startScript, lastDiscoveryAt, createdAt, updatedAt,
   } = this;
   return {
     id: _id,
@@ -87,6 +97,8 @@ projectSchema.methods.toJSON = function toJSON() {
     targetUrl: targetUrl ?? null,
     repoUrl: repoUrl ?? null,
     trusted: trusted !== false,
+    cloneStatus: cloneStatus ?? 'ready',
+    cloneError: cloneError ?? null,
     startScript: startScript ?? null,
     lastDiscoveryAt,
     createdAt,
