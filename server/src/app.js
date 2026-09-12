@@ -29,6 +29,7 @@ import deploymentsRoutes from './routes/deployments.routes.js';
 import projectsRoutes from './routes/projects.routes.js';
 import assessmentsRoutes from './routes/assessments.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import connectionsRoutes from './routes/connections.routes.js';
 
 export function createApp({ logging = env.NODE_ENV !== 'test' } = {}) {
   const app = express();
@@ -89,6 +90,7 @@ export function createApp({ logging = env.NODE_ENV !== 'test' } = {}) {
   app.use('/api/projects', projectsRoutes);
   app.use('/api/assessments', assessmentsRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/connections', connectionsRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

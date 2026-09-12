@@ -6,11 +6,11 @@
  * (docs/04_App_UI.md §1: "Zero is zero. Empty is empty.").
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost, apiPatch, apiDelete } from '@/services/api';
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '@/services/api';
 import type {
   TestRun, McpTool, AuditEvent, ApiSpec, Grant, RiskClass, HealthStatus, HttpMethod, Finding,
   Deployment, DeployConfig, PreflightCheck,
-  Project, Assessment, SettingsConfig,
+  Project, Assessment, SettingsConfig, Connection,
 } from '@/types';
 
 /* ── Health ───────────────────────────────────────────────────────────────── */
@@ -302,6 +302,30 @@ export function useImportProjectEnv() {
     mutationFn: (vars: { id: string }) =>
       apiPost<{ id: string; runtimeEnvKeys: string[]; imported: number }>(`/projects/${vars.id}/env/from-file`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}
+
+/* ── Connections (a user's own GitHub / Render / Vercel tokens) ─────────────── */
+
+export const useConnections = () => useQuery({
+  queryKey: ['connections'],
+  queryFn: () => apiGet<{ connections: Connection[] }>('/connections'),
+});
+
+export function useSetConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string; token: string }) =>
+      apiPut<{ provider: string; connected: boolean; last4: string }>(`/connections/${vars.provider}`, { token: vars.token }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+  });
+}
+
+export function useRemoveConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string }) => apiDelete(`/connections/${vars.provider}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
   });
 }
 

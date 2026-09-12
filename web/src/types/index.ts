@@ -264,6 +264,15 @@ export interface Project {
   updatedAt: string;
 }
 
+/** A user's own third-party account link. Presence only; the token never leaves the server. */
+export interface Connection {
+  provider: 'github' | 'render' | 'vercel';
+  authType?: 'token' | 'oauth';
+  connected: boolean;
+  last4?: string | null;
+  updatedAt?: string;
+}
+
 export type AssessState =
   | 'PENDING' | 'DISCOVERING' | 'TESTING' | 'AWAITING_INPUT'
   | 'SCANNING' | 'ANALYZING' | 'REPORTING' | 'COMPLETE' | 'FAILED';

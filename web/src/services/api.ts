@@ -127,6 +127,11 @@ export async function apiPatch<T>(url: string, body?: unknown): Promise<T> {
   return data.data;
 }
 
+export async function apiPut<T>(url: string, body?: unknown): Promise<T> {
+  const { data } = await http.put<ApiSuccess<T>>(url, body);
+  return data.data;
+}
+
 /** A stable session id, so grants persist across a page reload but not a tab close. */
 export function ensureSessionId(): string {
   let id = sessionStorage.getItem('agentiq-session-id');

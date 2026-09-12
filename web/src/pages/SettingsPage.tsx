@@ -7,17 +7,24 @@
  * The grants section is the visible counterpart to the permission sheet: what
  * you approved, and a way to take it back.
  */
-import { useHealth, useGrants, useRevokeGrant, useSettingsConfig } from '@/hooks/api';
+import { useState } from 'react';
+import {
+  useHealth, useGrants, useRevokeGrant, useSettingsConfig,
+  useConnections, useSetConnection, useRemoveConnection,
+} from '@/hooks/api';
 import { useAuthStore } from '@/store/auth';
 import {
-  Card, CardHeader, CardBody, Button, Chip, RiskChip, EmptyState, Alert, SkeletonRows,
+  Card, CardHeader, CardBody, Button, Input, Chip, RiskChip, EmptyState, Alert, SkeletonRows,
 } from '@/components/ui';
+import { ApiError } from '@/services/api';
+import type { Connection } from '@/types';
 
 export function SettingsPage() {
   const { user, signOut } = useAuthStore();
   const { data: health } = useHealth();
   const { data: grantsData, isLoading } = useGrants();
   const { data: config } = useSettingsConfig();
+  const { data: connections } = useConnections();
   const revoke = useRevokeGrant();
 
   return (
@@ -33,6 +40,21 @@ export function SettingsPage() {
           <Row label="Name" value={user?.displayName ?? 'n/a'} />
           <Row label="Email" value={user?.email ?? 'n/a'} mono />
           <Row label="Role" value={user?.role ?? 'user'} />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Connections" />
+        <CardBody className="space-y-3">
+          <p className="t-small text-ink-muted">
+            Connect your own GitHub, Render and Vercel accounts to clone private repos and deploy to
+            your own hosting. Each token is encrypted on the server, used only for your deploys, and
+            never shown again or sent back to the browser.
+          </p>
+          {(['github', 'render', 'vercel'] as const).map((provider) => (
+            <ConnectionRow key={provider} provider={provider}
+              conn={connections?.connections.find((c) => c.provider === provider)} />
+          ))}
         </CardBody>
       </Card>
 
@@ -161,6 +183,67 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
     <div className="grid grid-cols-[120px_1fr] gap-3">
       <span className="t-label pt-0.5">{label}</span>
       <span className={mono ? 't-mono' : ''}>{value}</span>
+    </div>
+  );
+}
+
+const PROVIDER_META: Record<Connection['provider'], { label: string; placeholder: string; where: string }> = {
+  github: { label: 'GitHub', placeholder: 'Personal access token (repo scope)', where: 'github.com/settings/tokens' },
+  render: { label: 'Render', placeholder: 'Render API key', where: 'dashboard.render.com → Account → API Keys' },
+  vercel: { label: 'Vercel', placeholder: 'Vercel access token', where: 'vercel.com/account/tokens' },
+};
+
+/** One provider: connect with a pasted token, or show connected + disconnect. */
+function ConnectionRow({ provider, conn }: { provider: Connection['provider']; conn?: Connection }) {
+  const meta = PROVIDER_META[provider];
+  const setConn = useSetConnection();
+  const removeConn = useRemoveConnection();
+  const [token, setToken] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const connected = conn?.connected;
+
+  const connect = async () => {
+    setError(null);
+    try {
+      await setConn.mutateAsync({ provider, token: token.trim() });
+      setToken('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the token.');
+    }
+  };
+
+  return (
+    <div className="rounded-[8px] border border-line p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-16 text-[13px] font-medium text-ink">{meta.label}</span>
+        {connected ? (
+          <>
+            <Chip className="bg-success-50 text-success">connected</Chip>
+            {conn?.last4 && <span className="t-mono text-[12px] text-ink-subtle">…{conn.last4}</span>}
+            <div className="flex-1" />
+            <Button size="sm" variant="secondary" loading={removeConn.isPending}
+              onClick={() => removeConn.mutate({ provider })}>
+              Disconnect
+            </Button>
+          </>
+        ) : (
+          <>
+            <Chip className="bg-surface-3 text-ink-subtle">not connected</Chip>
+            <span className="t-small text-ink-subtle">from {meta.where}</span>
+          </>
+        )}
+      </div>
+      {!connected && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Input mono type="password" autoComplete="off" placeholder={meta.placeholder}
+            className="min-w-0 flex-1" value={token} onChange={(e) => setToken(e.target.value)} />
+          <Button size="sm" loading={setConn.isPending} disabled={token.trim().length < 8}
+            onClick={() => void connect()}>
+            Connect
+          </Button>
+        </div>
+      )}
+      {error && <p className="t-small mt-1.5 text-danger">{error}</p>}
     </div>
   );
 }
