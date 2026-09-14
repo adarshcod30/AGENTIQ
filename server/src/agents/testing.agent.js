@@ -103,8 +103,25 @@ Assertion kinds, and their exact shapes:
   { "kind": "bodyMatches",       "pattern": "^\\\\{" }
 
 Rules:
-  - Assert what the endpoint SHOULD do. Never weaken an assertion to make it pass.
+  - Assert what a CORRECT endpoint should do, and only what you are confident of.
+    Never weaken an assertion to make it pass. Prefer a few high-confidence
+    assertions over many speculative ones.
+  - Status codes: a normal successful GET returns 200 (a create returns 201). Do
+    NOT assume an unsupported method returns 405: most frameworks, Express among
+    them, return 404 for a method or route they do not handle, so expect 404
+    unless a specification explicitly declares 405.
+  - Authentication: if the endpoint is admin or privileged, or its purpose implies
+    a credential is required, a request WITHOUT one should expect 401 or 403, never
+    200. When you were given no credential, assert 401 for such a route.
+  - Response body: assert only on fields whose names you actually know from the
+    description or specification. NEVER invent field names. When unsure of the
+    shape, assert the response is JSON (jsonPathType "$" is object or array) or
+    that a named field exists (jsonPathExists), not an exact value you are guessing.
+  - content-type: assert the media type only ("application/json"), not the charset.
   - A negative case must expect a failure status. Do not rewrite it to expect 200.
+  - A boundary or malformed-input case should expect an error (400 or 422) only
+    when the endpoint clearly validates that input. If you are not sure it
+    validates, do not assert a specific error code for it.
   - jsonPath uses $.a.b and $.a[0] only.
   - Cover at least one positive, one negative and one boundary case.`;
 
