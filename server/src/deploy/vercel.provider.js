@@ -70,6 +70,47 @@ async function githubRepoId(ownerName, githubToken) {
   return id;
 }
 
+/**
+ * Links the project to its GitHub repo and turns OFF push auto-deploys.
+ *
+ * The project then shows as connected and its production domain tracks deploys,
+ * while AGENTIQ stays the only thing that triggers one (its model is assess,
+ * then deploy explicitly, never deploy-on-every-push). Best-effort: a failure
+ * here is recorded as a step and never fails the deployment itself.
+ */
+async function linkProjectRepo(base, token, project, ownerName) {
+  const steps = [];
+  try {
+    const link = await vercelApi(`${base}/v10/projects/${encodeURIComponent(project)}/link`, {
+      method: 'POST', token, body: { type: 'github', repo: ownerName },
+    });
+    steps.push({
+      action: 'link',
+      message: link.status < 400
+        ? `Linked ${ownerName} to the Vercel project`
+        : `Repo link returned HTTP ${link.status}${link.json?.error?.message ? `: ${link.json.error.message}` : ''}`,
+      at: new Date(),
+    });
+  } catch (err) {
+    steps.push({ action: 'link', message: `Repo link skipped: ${err.message}`, at: new Date() });
+  }
+  try {
+    const patch = await vercelApi(`${base}/v9/projects/${encodeURIComponent(project)}`, {
+      method: 'PATCH', token, body: { gitProviderOptions: { createDeployments: 'disabled' } },
+    });
+    steps.push({
+      action: 'auto-deploy-off',
+      message: patch.status < 400
+        ? 'Push auto-deploy disabled: AGENTIQ deploys explicitly'
+        : `Auto-deploy setting returned HTTP ${patch.status}`,
+      at: new Date(),
+    });
+  } catch (err) {
+    steps.push({ action: 'auto-deploy-off', message: `Auto-deploy off skipped: ${err.message}`, at: new Date() });
+  }
+  return steps;
+}
+
 export const vercelProvider = {
   name: 'vercel',
   displayName: 'Vercel',
@@ -146,6 +187,8 @@ export const vercelProvider = {
         name,
         gitSource: { type: 'github', repoId, ref },
         projectSettings: { framework: null },
+        // Deploy to PRODUCTION so the project's stable domain tracks this build.
+        target: 'production',
       },
     });
     if (create.status >= 400 || !create.json?.id) {
@@ -154,6 +197,12 @@ export const vercelProvider = {
     }
     const deployId = create.json.id;
     steps.push({ action: 'create', message: `Vercel deployment ${deployId} created`, at: new Date() });
+
+    // Link the repo and disable push auto-deploys, so the project shows connected
+    // and its production domain tracks deploys, without turning on deploy-on-push.
+    if (create.json.projectId) {
+      steps.push(...await linkProjectRepo(base, token, create.json.projectId, repo));
+    }
 
     // 2. Poll readyState until it settles.
     let status = create.json.readyState ?? 'QUEUED';
