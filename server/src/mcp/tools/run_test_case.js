@@ -197,11 +197,21 @@ export function evaluateAssertions(assertions, response) {
 
       case 'headerEquals': {
         const actual = lowerHeaders[a.name.toLowerCase()];
+        // Compare case-insensitively, and treat header PARAMETERS as optional:
+        // a header like `content-type` carries `; charset=utf-8`, so an assertion
+        // that names the media type alone (`application/json`) must still match.
+        // Exact string comparison here failed a correct JSON response on every
+        // endpoint, which is a false negative, not a defect in the target.
+        const av = String(actual ?? '').toLowerCase().trim();
+        const ev = String(a.value ?? '').toLowerCase().trim();
+        const essence = (s) => s.split(';')[0].trim();
+        const pass = actual !== undefined
+          && (av === ev || essence(av) === essence(ev));
         return {
           kind: a.kind,
           expected: `${a.name}: ${a.value}`,
           actual: actual === undefined ? 'absent' : String(actual),
-          pass: String(actual) === a.value,
+          pass,
         };
       }
 

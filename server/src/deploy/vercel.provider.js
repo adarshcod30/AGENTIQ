@@ -59,7 +59,10 @@ export const vercelProvider = {
     return {
       checks: [{
         name: 'provider',
-        status: 'ok',
+        // Must be one of the Deployment model's check-status enum (pass|warn|fail).
+        // 'ok' is not in that enum, so it failed the deployment record's save and
+        // blocked every Vercel deploy before it could start.
+        status: 'pass',
         detail: `Will deploy ${repo} to your connected Vercel account. Vercel must have access to the repo (its GitHub app installed).`,
       }],
       ok: true,

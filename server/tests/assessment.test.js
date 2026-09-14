@@ -97,10 +97,11 @@ describe('runAssessment (stubbed pipeline)', () => {
     expect(done.endpoints.find((e) => e.path === '/login').failed).toBe(1);
     expect(done.security.findings).toHaveLength(1);
 
-    // A high finding AND a failing endpoint are both deployment blockers.
+    // The high finding blocks the deploy. A failing generated assertion is a
+    // WARNING, not a blocker: the generated test may have guessed the contract.
     expect(done.readiness.ready).toBe(false);
     expect(done.readiness.blockers.some((b) => b.includes('code-eval'))).toBe(true);
-    expect(done.readiness.blockers.some((b) => b.includes('/login'))).toBe(true);
+    expect(done.readiness.warnings.some((w) => w.includes('/login'))).toBe(true);
 
     // The report is assembled and reflects the run.
     expect(done.report.project.framework).toBe('express');
@@ -213,14 +214,31 @@ describe('runAssessment (stubbed pipeline)', () => {
 });
 
 describe('report service', () => {
-  it('computeReadiness blocks on a high finding and a failing endpoint', () => {
+  it('blocks on a high finding and an errored endpoint, warns on a failing assertion', () => {
     const readiness = computeReadiness({
       security: { findings: [{ severity: 'high', category: 'x', title: 't' }] },
-      endpoints: [{ status: 'complete', failed: 2, method: 'GET', path: '/a' }],
+      endpoints: [
+        { status: 'complete', failed: 2, method: 'GET', path: '/a' },
+        { status: 'complete', errored: 1, method: 'GET', path: '/b' },
+      ],
       clarifications: [],
     });
     expect(readiness.ready).toBe(false);
-    expect(readiness.blockers).toHaveLength(2);
+    // The high finding and the errored endpoint block; the failing assertion warns.
+    expect(readiness.blockers.some((b) => b.includes('x'))).toBe(true);
+    expect(readiness.blockers.some((b) => b.includes('/b'))).toBe(true);
+    expect(readiness.blockers.some((b) => b.includes('/a'))).toBe(false);
+    expect(readiness.warnings.some((w) => w.includes('/a'))).toBe(true);
+  });
+
+  it('a secure, running app with only failing assertions is READY', () => {
+    const readiness = computeReadiness({
+      security: { findings: [] },
+      endpoints: [{ status: 'complete', passed: 2, failed: 1, method: 'GET', path: '/a' }],
+      clarifications: [],
+    });
+    expect(readiness.ready).toBe(true);
+    expect(readiness.warnings.some((w) => w.includes('/a'))).toBe(true);
   });
 
   it('renders a report to Markdown with the verdict', () => {

@@ -399,6 +399,20 @@ export function endpointToOperation(endpoint, { intent = null } = {}) {
  * categories. This is the autonomy step: the user provides the project, not the
  * tests. docs/10_AUTONOMOUS_PLATFORM.md §D, Phase 2.
  */
+/**
+ * Fills path params with a sample value so the generation base URL is a REAL,
+ * reachable endpoint. `baseUrl` is the app root; the generation prompt tells the
+ * model "the base URL IS the endpoint", so the base must actually be the
+ * endpoint. Passing the bare root instead made every `path: ""` case hit `/`,
+ * which 404s on any app without a root route, and it is exactly the bug that
+ * made a healthy app's endpoints all fail their positive tests.
+ */
+export function sampleEndpointPath(operation) {
+  return String(operation.path ?? '/')
+    .replace(/:[A-Za-z0-9_]+/g, '1') // Express-style /users/:id -> /users/1
+    .replace(/\{[A-Za-z0-9_]+\}/g, '1'); // OpenAPI-style /users/{id} -> /users/1
+}
+
 export async function runTestingAgentForEndpoint({
   endpoint, baseUrl, intent = null, count = 4, runTool, context = {}, llm = generateJSON,
 }) {
@@ -410,7 +424,8 @@ export async function runTestingAgentForEndpoint({
   const description = intent ?? `${operation.method} ${operation.path}${paramNote}`;
 
   const outcome = await runTestingAgent({
-    url: baseUrl, method: operation.method, description, count,
+    url: joinUrl(baseUrl, sampleEndpointPath(operation)),
+    method: operation.method, description, count,
     operation, categories, runTool, context, llm,
   });
   return {
