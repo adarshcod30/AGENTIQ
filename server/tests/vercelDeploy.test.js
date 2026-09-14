@@ -58,23 +58,29 @@ describe('Vercel provider deploy', () => {
     await setConnection({ userId, provider: 'vercel', token: VTOKEN });
     const state = await withVercel({ statuses: ['BUILDING', 'READY'], url: 'demo-api-abc.vercel.app' });
 
-    const result = await vercelProvider.deploy(input, { context: { userId }, sleep: noSleep, pollIntervalMs: 0, maxPolls: 5 });
+    const result = await vercelProvider.deploy(input, {
+      context: { userId }, sleep: noSleep, pollIntervalMs: 0, maxPolls: 5,
+      resolveRepoId: async () => 987654,
+    });
 
     expect(result.ok).toBe(true);
     expect(result.deployStatus).toBe('READY');
     expect(result.liveUrl).toBe('https://demo-api-abc.vercel.app');
     expect(result.deployId).toBeTruthy();
 
-    // The deploy call carried the user's token and the right git source.
+    // The deploy call carried the user's token and the right git source. Vercel
+    // identifies the repo by its numeric id, not owner/name.
     const post = state.requests.find((r) => r.method === 'POST');
     expect(post.auth).toBe(`Bearer ${VTOKEN}`);
-    expect(post.body.gitSource).toMatchObject({ type: 'github', repo: 'acme/demo-api', ref: 'main' });
+    expect(post.body.gitSource).toMatchObject({ type: 'github', repoId: 987654, ref: 'main' });
   });
 
   it('reports a failed deployment without throwing', async () => {
     await setConnection({ userId, provider: 'vercel', token: VTOKEN });
     await withVercel({ statuses: ['ERROR'] });
-    const result = await vercelProvider.deploy(input, { context: { userId }, sleep: noSleep, pollIntervalMs: 0, maxPolls: 5 });
+    const result = await vercelProvider.deploy(input, {
+      context: { userId }, sleep: noSleep, pollIntervalMs: 0, maxPolls: 5, resolveRepoId: async () => 987654,
+    });
     expect(result.ok).toBe(false);
     expect(result.deployStatus).toBe('ERROR');
   });

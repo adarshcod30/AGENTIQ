@@ -43,6 +43,33 @@ async function vercelApi(url, { method = 'GET', body, token } = {}) {
   return { status: res.status, json };
 }
 
+/**
+ * Resolves the NUMERIC GitHub repository id, which Vercel's gitSource requires:
+ * `/v13/deployments` rejects `{ repo: "owner/name" }` with "missing required
+ * property repoId". A public repo needs no token; a private one uses the user's
+ * connected GitHub token. Overridable in tests via the `resolveRepoId` dep.
+ */
+async function githubRepoId(ownerName, githubToken) {
+  const res = await fetchGuarded(`https://api.github.com/repos/${ownerName}`, {
+    headers: {
+      'user-agent': 'agentiq-deploy',
+      accept: 'application/vnd.github+json',
+      ...(githubToken ? { authorization: `Bearer ${githubToken}` } : {}),
+    },
+  });
+  if (res.status >= 400) {
+    throw Object.assign(new Error(
+      res.status === 404
+        ? `GitHub repo ${ownerName} was not found or is not accessible. Connect GitHub in Settings for a private repo.`
+        : `Could not look up ${ownerName} on GitHub (HTTP ${res.status}).`,
+    ), { code: 'VERCEL_DEPLOY_FAILED' });
+  }
+  let id = null;
+  try { id = JSON.parse(res.body)?.id; } catch { /* non-json */ }
+  if (!id) throw Object.assign(new Error(`GitHub returned no id for ${ownerName}.`), { code: 'VERCEL_DEPLOY_FAILED' });
+  return id;
+}
+
 export const vercelProvider = {
   name: 'vercel',
   displayName: 'Vercel',
@@ -72,7 +99,10 @@ export const vercelProvider = {
   },
 
   async deploy(input, deps = {}) {
-    const { context = {}, sleep = defaultSleep, pollIntervalMs = 4000, maxPolls = 40 } = deps;
+    const {
+      context = {}, sleep = defaultSleep, pollIntervalMs = 4000, maxPolls = 40,
+      resolveRepoId = githubRepoId,
+    } = deps;
     const base = (input.baseUrl ?? VERCEL_API_BASE()).replace(/\/+$/, '');
 
     const token = context.userId
@@ -98,12 +128,25 @@ export const vercelProvider = {
       };
     }
 
+    // Vercel's gitSource identifies the GitHub repo by its numeric id, not owner/name.
+    const githubToken = context.userId
+      ? await getConnectionToken({ userId: context.userId, provider: 'github' }).catch(() => null)
+      : null;
+    const repoId = await resolveRepoId(repo, githubToken);
+
     const steps = [];
 
-    // 1. Trigger a git deployment.
+    // 1. Trigger a git deployment. `projectSettings` is required by Vercel when
+    // the deployment also CREATES the project (a first deploy of a new name);
+    // `framework: null` lets Vercel auto-detect from the repo (here, the api/
+    // functions and vercel.json).
     const create = await vercelApi(`${base}/v13/deployments`, {
       method: 'POST', token,
-      body: { name, gitSource: { type: 'github', repo, ref } },
+      body: {
+        name,
+        gitSource: { type: 'github', repoId, ref },
+        projectSettings: { framework: null },
+      },
     });
     if (create.status >= 400 || !create.json?.id) {
       const msg = create.json?.error?.message ?? `Vercel rejected the deployment (HTTP ${create.status}).`;
