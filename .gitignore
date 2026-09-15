@@ -50,3 +50,6 @@ Thumbs.db
 # secrets, build output and local noise
 .env.local
 .next/
+
+# test and type-checker artefacts
+.turbo/
