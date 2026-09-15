@@ -143,6 +143,18 @@ async function phaseDiscoverUrlOnly(assessment, project) {
   return model;
 }
 
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const isMutating = (method) => MUTATING_METHODS.has(String(method ?? 'GET').toUpperCase());
+
+/** Order for testing: read-only first, then create, then modify, then delete. */
+function methodRank(method) {
+  const m = String(method ?? 'GET').toUpperCase();
+  if (m === 'DELETE') return 3;
+  if (m === 'PUT' || m === 'PATCH') return 2;
+  if (m === 'POST') return 1;
+  return 0;
+}
+
 async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, runtimeEnv = null, startScript = null, targetUrl = null, trusted = true }) {
   await transition(assessment, S.TESTING, 'starting the app and testing endpoints');
 
@@ -211,7 +223,28 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
   await assessment.save();
 
   const endpoints = (model.endpoints ?? []).slice(0, MAX_ENDPOINTS);
-  for (const endpoint of endpoints) {
+  // Test read-only endpoints before mutating ones, and reset the app to its seed
+  // state before any endpoint that a prior mutation dirtied. That stops a DELETE
+  // or PATCH from poisoning a later endpoint's reads. The restart only happens
+  // when state is actually dirty, so a run of read-only endpoints adds no latency.
+  const ordered = [...endpoints].sort((a, b) => methodRank(a.method) - methodRank(b.method));
+  let dirty = false;
+  for (const endpoint of ordered) {
+    if (dirty && app.baseUrl) {
+      try {
+        await deps.stopApp(ctx.runTool, ctx.context);
+        app = await deps.ensureApp({
+          runTool: ctx.runTool, context: ctx.context, scripts: model.scripts,
+          userId: String(assessment.userId), sessionId: ctx.sessionId, runtimeEnv, startScript,
+        });
+        assessment.baseUrl = app.baseUrl;
+      } catch (err) {
+        logger.warn({ assessmentId: String(assessment._id), err: err.message },
+          'app restart between endpoints failed; continuing on the current instance');
+      }
+      dirty = false;
+    }
+
     // Intent: read the endpoint's source through fs_read, then infer. The same
     // source is handed to test generation as contract-anchoring context.
     let intent = null;
@@ -261,6 +294,8 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
         passed: 0, failed: 0, errored: 0,
       });
     }
+    // A mutating endpoint's tests changed state, so the next endpoint restarts.
+    if (isMutating(endpoint.method)) dirty = true;
     await assessment.save();
   }
   return { paused: false };
