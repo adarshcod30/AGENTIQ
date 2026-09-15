@@ -162,6 +162,8 @@ export interface HealthStatus {
   };
   mail: { configured: boolean; driver: string };
   googleOAuth: string;
+  /** True on the shared hosted deployment: the local-folder workflow is hidden. */
+  hosted?: boolean;
   env: string;
 }
 

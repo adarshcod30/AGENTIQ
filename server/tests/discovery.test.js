@@ -16,6 +16,7 @@ import { createApp } from '../src/app.js';
 import { User } from '../src/models/User.js';
 import { Project } from '../src/models/Project.js';
 import { Discovery } from '../src/models/Discovery.js';
+import { env } from '../src/config/env.js';
 
 const app = createApp({ logging: false });
 const VULN = path.resolve(import.meta.dirname, '../../fixtures/vulnerable-api');
@@ -62,6 +63,32 @@ describe('POST /api/projects', () => {
   it('requires authentication', async () => {
     const res = await request(app).post('/api/projects').send({ name: 'x', workspaceRoot: VULN });
     expect(res.status).toBe(401);
+  });
+
+  it('refuses a local folder on the hosted deployment (a visitor folder is not on the server)', async () => {
+    env.HOSTED = true;
+    try {
+      const res = await request(app).post('/api/projects')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Laptop folder', workspaceRoot: VULN });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('FOLDER_NOT_ALLOWED_HOSTED');
+    } finally {
+      env.HOSTED = false;
+    }
+  });
+
+  it('still accepts a deployed URL when hosted', async () => {
+    env.HOSTED = true;
+    try {
+      const res = await request(app).post('/api/projects')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Deployed project', targetUrl: 'https://example.com' });
+      expect(res.status).toBe(201);
+      expect(res.body.data.project.targetUrl).toContain('example.com');
+    } finally {
+      env.HOSTED = false;
+    }
   });
 
   it('stores opt-in runtime env, exposes only key names, and never returns values', async () => {

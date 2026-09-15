@@ -13,7 +13,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { FolderPlus, Play, FolderGit2, Clock, KeyRound, FileDown } from 'lucide-react';
 import {
   useProjects, useCreateProject, useUpdateProjectEnv, useImportProjectEnv,
-  useAssessments, useCreateAssessment,
+  useAssessments, useCreateAssessment, useHealth,
 } from '@/hooks/api';
 import {
   Card, CardHeader, CardBody, Button, Field, Input, Textarea, Alert, Chip, EmptyState, SkeletonRows,
@@ -46,6 +46,9 @@ export function AssessChip({ state }: { state: AssessState }) {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
+  // On the shared hosted site the server can't see a visitor's laptop, so the
+  // local-folder workflow is hidden and only a deployed URL or GitHub repo work.
+  const hosted = useHealth().data?.hosted ?? false;
   const projects = useProjects();
   const create = useCreateProject();
   const updateEnv = useUpdateProjectEnv();
@@ -124,8 +127,11 @@ export function ProjectsPage() {
       <div>
         <h1 className="t-h1">Projects</h1>
         <p className="t-small mt-1 text-ink-muted">
-          Point AGENTIQ at a project folder on this machine. It discovers the routes, runs the app,
-          tests it and scans it, then judges whether it is ready to deploy.
+          {hosted
+            ? 'Point AGENTIQ at a deployed URL or a public GitHub repo. It discovers the routes, '
+              + 'scans for issues, and judges whether it is ready to deploy.'
+            : 'Point AGENTIQ at a project folder on this machine. It discovers the routes, runs the app, '
+              + 'tests it and scans it, then judges whether it is ready to deploy.'}
         </p>
       </div>
 
@@ -140,16 +146,22 @@ export function ProjectsPage() {
                 value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <p className="t-small text-ink-muted">
-              Point AGENTIQ at a local folder, a deployed URL, a public GitHub repo, or a mix. A
-              deployed URL tests the live app; a GitHub repo is cloned and statically scanned, its
-              code is never run; a folder discovers routes and scans the source.
+              {hosted
+                ? 'Give a deployed URL, a public GitHub repo, or both. A deployed URL probes the live '
+                  + 'app; a GitHub repo is cloned and statically scanned, its code is never run. Scanning '
+                  + 'a folder on your own machine works when you run AGENTIQ locally.'
+                : 'Point AGENTIQ at a local folder, a deployed URL, a public GitHub repo, or a mix. A '
+                  + 'deployed URL tests the live app; a GitHub repo is cloned and statically scanned, its '
+                  + 'code is never run; a folder discovers routes and scans the source.'}
             </p>
-            <Field label="Workspace path (folder)" htmlFor="proj-root"
-              hint="An absolute path to the project folder on the server host. Optional if you give a deployed URL.">
-              <Input id="proj-root" mono placeholder="/Users/you/code/my-api"
-                value={root} onChange={(e) => setRoot(e.target.value)} />
-            </Field>
-            <Field label="Deployed URL (optional)" htmlFor="proj-url"
+            {!hosted && (
+              <Field label="Workspace path (folder)" htmlFor="proj-root"
+                hint="An absolute path to the project folder on the machine running AGENTIQ. Optional if you give a deployed URL.">
+                <Input id="proj-root" mono placeholder="/Users/you/code/my-api"
+                  value={root} onChange={(e) => setRoot(e.target.value)} />
+              </Field>
+            )}
+            <Field label={hosted ? 'Deployed URL' : 'Deployed URL (optional)'} htmlFor="proj-url"
               hint="A live https URL, e.g. https://my-app.vercel.app. Security probes run against it directly. Functional tests are skipped on a live app so it is never sent test writes.">
               <Input id="proj-url" mono placeholder="https://my-app.vercel.app"
                 value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} />
@@ -159,11 +171,13 @@ export function ProjectsPage() {
               <Input id="proj-repo" mono placeholder="https://github.com/owner/repo"
                 value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} />
             </Field>
-            <Field label="Runtime environment (optional)" htmlFor="proj-env"
-              hint="KEY=VALUE per line. Only if the app needs it to start (a database URL, a secret). Stored locally on the server, never sent back to the browser. Cannot override PORT.">
-              <Textarea id="proj-env" mono rows={3} placeholder={'MONGO_URI=mongodb://localhost:27017/app\nJWT_SECRET=…'}
-                value={envText} onChange={(e) => setEnvText(e.target.value)} />
-            </Field>
+            {!hosted && (
+              <Field label="Runtime environment (optional)" htmlFor="proj-env"
+                hint="KEY=VALUE per line. Only if the app needs it to start (a database URL, a secret). Stored locally on the server, never sent back to the browser. Cannot override PORT.">
+                <Textarea id="proj-env" mono rows={3} placeholder={'MONGO_URI=mongodb://localhost:27017/app\nJWT_SECRET=…'}
+                  value={envText} onChange={(e) => setEnvText(e.target.value)} />
+              </Field>
+            )}
             <Button type="submit" loading={create.isPending} disabled={!name.trim() || (!root.trim() && !targetUrl.trim() && !repoUrl.trim())}>
               <FolderPlus size={16} aria-hidden /> Add project
             </Button>

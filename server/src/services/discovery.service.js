@@ -11,6 +11,7 @@
  * with a clear error before any project row is written.
  */
 import { createJail, FsJailError } from '../mcp/fsJail.js';
+import { env } from '../config/env.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
 import { cloneRepo, normalizeGithubUrl, GitError } from './git.service.js';
 import { getConnectionToken } from './connections.service.js';
@@ -43,6 +44,18 @@ export async function createProject({
   let root;
   let normalizedRepo = null; // a GitHub project: validated now, cloned in the background
   if (workspaceRoot) {
+    // On the shared hosted deployment a "folder" is on the user's own laptop,
+    // which this server cannot reach; resolving it against the server's own
+    // filesystem is meaningless at best and, since the jail would be rooted at a
+    // server directory the user names, a way to read the server's files at worst.
+    // Refuse it and steer them to a deployed URL or a public GitHub repo.
+    if (env.HOSTED) {
+      throw new DiscoveryError(
+        'A folder path only works when you run AGENTIQ on your own machine. On the hosted '
+        + 'site, assess a deployed URL or a public GitHub repo instead.',
+        'FOLDER_NOT_ALLOWED_HOSTED', 400,
+      );
+    }
     try {
       root = createJail(workspaceRoot).root;
     } catch (err) {

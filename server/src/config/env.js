@@ -118,6 +118,17 @@ export const envSchema = z
     // message instead of throwing from inside pino at boot.
     LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).optional(),
 
+    // ── Deployment mode ──────────────────────────────────────────────────────
+    // HOSTED=true means this server is a shared, multi-user deployment (the
+    // public site) rather than a copy someone runs on their own machine. A
+    // remote user's "project folder" lives on THEIR laptop, which this server
+    // cannot see, so local-filesystem project roots are refused: they would
+    // either error confusingly or, worse, let a remote user point discovery at
+    // the server's own files (its .env holds every secret). Hosted users assess
+    // a deployed URL or a public GitHub repo instead. Defaults false so a local
+    // self-hosted run keeps the folder workflow.
+    HOSTED: boolFromString,
+
     // ── Egress guard ─────────────────────────────────────────────────────────
     EGRESS_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
     EGRESS_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
@@ -269,7 +280,7 @@ export const ENV_KEYS = [
   'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
   'MAIL_DRIVER', 'RESEND_API_KEY', 'SMTP_URL', 'MAIL_FROM',
   'GMAIL_USER', 'GMAIL_APP_PASSWORD', 'SMTP_HOST', 'SMTP_PORT',
-  'RENDER_API_KEY', 'RENDER_API_BASE', 'LOG_LEVEL',
+  'RENDER_API_KEY', 'RENDER_API_BASE', 'LOG_LEVEL', 'HOSTED',
   'EGRESS_TIMEOUT_MS', 'EGRESS_MAX_BYTES',
   'EGRESS_RPS_PER_HOST', 'ALLOW_PRIVATE_TARGETS',
 ];

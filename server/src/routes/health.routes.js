@@ -60,6 +60,9 @@ router.get('/health', (req, res) => {
     // Whether verification mail can actually be delivered, and by what.
     mail: mailStatus(),
     googleOAuth: isGoogleOAuthConfigured() ? 'configured' : 'disabled',
+    // True on the shared public deployment: the UI hides the local-folder
+    // workflow, which only works when AGENTIQ runs on the user's own machine.
+    hosted: env.HOSTED,
     env: env.NODE_ENV,
   });
 });
