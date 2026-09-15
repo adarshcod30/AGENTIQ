@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { startRun, listRuns, getRun } from '../services/run.service.js';
+import { resolveUserLlm } from '../services/llm.js';
 import { getSpec } from '../services/spec.service.js';
 import { getStats } from '../services/stats.service.js';
 import { protectRoute } from '../middleware/auth.js';
@@ -59,6 +60,11 @@ router.post('/', protectRoute, async (req, res) => {
     if (!operation) return fail(res, 404, 'NOT_FOUND', 'Operation not found in that specification');
   }
 
+  // The user's own AI provider (BYOK) drives BOTH generation and the failure
+  // explanations; no active provider resolves to the platform-key generateJSON,
+  // i.e. the previous behaviour.
+  const userLlm = await resolveUserLlm({ userId: req.user._id });
+
   const run = await startRun({
     userId: req.user._id,
     sessionId,
@@ -66,6 +72,8 @@ router.post('/', protectRoute, async (req, res) => {
     count,
     operation,
     specRef: specRef ?? null,
+    llm: userLlm,
+    explainLlm: userLlm,
   });
 
   // A run awaiting permission is a 202: the client must show the permission

@@ -457,10 +457,12 @@ export async function generateJSON({
  * entry and inject the returned function wherever an agent takes `llm`; the deep
  * agent code never learns whose key it is.
  */
-export async function resolveUserLlm({ userId, task = TASK.GENERATION } = {}) {
+export async function resolveUserLlm({ userId } = {}) {
   const active = userId ? await getActiveProviderConfig({ userId }).catch(() => null) : null;
   if (!active) return generateJSON;
 
+  // The user's provider is task-agnostic: they configured one model, used for
+  // generation and explanation alike.
   const userEntry = {
     name: active.provider,
     model: active.model ?? active.config?.model ?? null,
@@ -475,10 +477,15 @@ export async function resolveUserLlm({ userId, task = TASK.GENERATION } = {}) {
       signal: opts.signal,
     }),
   };
-  const envEntries = providerOrder().map((name) => ({ name, call: PROVIDERS[name], model: modelFor(task, name) }));
-  const providerChain = [userEntry, ...envEntries];
 
-  return (opts) => generateJSON({ ...opts, providerChain });
+  // Build the platform FALLBACK chain per call, honouring the task tier in opts
+  // (generation vs the cheaper explanation tier), so a fallback still picks the
+  // right platform model. The user's provider always leads.
+  return (opts = {}) => {
+    const task = opts.task ?? TASK.GENERATION;
+    const envEntries = providerOrder().map((name) => ({ name, call: PROVIDERS[name], model: modelFor(task, name) }));
+    return generateJSON({ ...opts, providerChain: [userEntry, ...envEntries] });
+  };
 }
 
 export default {
