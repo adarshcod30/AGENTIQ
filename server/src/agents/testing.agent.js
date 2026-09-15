@@ -161,8 +161,17 @@ export function buildPrompt({
       '```',
       'Read it to see the REAL status codes it returns, the fields it responds with, the',
       'inputs it validates, and the branches worth covering (auth checks, not-found, bad',
-      'input). Target those cases precisely. But assert what the endpoint SHOULD do per its',
-      'purpose, not merely what this code happens to do, so a real bug is still caught.',
+      'input). Target those cases precisely, and let the code set your confidence:',
+      '  - Where the handler clearly validates an input, guards auth, or handles a missing',
+      '    resource, assert the matching 4xx at HIGH confidence: a miss there is a real bug.',
+      '  - Where the handler does NOT do those things, it will answer on its success path.',
+      '    Do NOT assert a 4xx there at high confidence. Either assert the status the code',
+      '    will actually return, or, to flag that it SHOULD be stricter, mark that 4xx',
+      '    assertion "low" confidence, so the note stays visible without failing the run on',
+      '    behaviour the code plainly shows.',
+      '  - If the handler requires a credential you were not given, do not write a positive',
+      '    case that expects success: the unauthenticated case (expecting 401 or 403) is the',
+      '    one you can actually verify without a token.',
     );
   }
 
