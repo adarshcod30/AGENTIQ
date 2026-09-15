@@ -280,8 +280,24 @@ export function DeployPage() {
                 {history.data.deployments.map((d) => (
                   <div key={d._id} className="flex items-center gap-3 px-4 py-2.5">
                     <StateChip state={d.state} />
-                    <span className="t-mono min-w-0 flex-1 truncate text-[12.5px]">{d.serviceName}</span>
-                    <span className="t-small text-ink-subtle">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="t-mono truncate text-[12.5px]">{d.serviceName}</span>
+                        {d.provider && <Chip className="bg-surface-3 text-ink-muted">{d.provider}</Chip>}
+                      </div>
+                      {/*
+                        The deployed link, kept on every past deployment, not only
+                        on the one just finished. Without this a user who navigates
+                        away loses the URL the platform produced for them.
+                      */}
+                      {d.liveUrl && (
+                        <a href={d.liveUrl} target="_blank" rel="noreferrer noopener"
+                          className="t-mono mt-0.5 inline-flex max-w-full items-center gap-1 truncate text-[12px] font-medium text-accent hover:underline">
+                          {d.liveUrl} <ExternalLink size={11} aria-hidden />
+                        </a>
+                      )}
+                    </div>
+                    <span className="t-small shrink-0 text-ink-subtle">
                       {new Date(d.startedAt).toLocaleString()}
                     </span>
                   </div>
