@@ -169,6 +169,59 @@ describe('agent -> MCP tool -> fixture, end to end', () => {
     expect(vuln.summary.failed).toBe(1); // 500, not 400
   });
 
+  it('accepts a defensible client-error guess (404 where the app returns 400)', async () => {
+    // hardened /users/abc returns 400 for a non-numeric id. A generated test that
+    // guessed 404 (missing, not malformed) is a defensible reading of the same
+    // contract, so status equivalence passes it instead of false-failing.
+    const guess = [{
+      name: 'Non-numeric id, guessed 404', intent: 'boundary', method: 'GET', path: 'users/abc',
+      headers: {}, category: 'boundary',
+      assertions: [{ kind: 'status', expected: 404 }],
+    }];
+    const result = await runTestingAgent({
+      url: hardenedUrl, description: 'fixture', llm: stubLlm(guess),
+      runTool: toolRunner(hardenedUrl), context: CTX,
+    });
+    expect(result.summary.passed).toBe(1);
+    expect(result.summary.failed).toBe(0);
+    expect(result.functional[0].assertions[0].actual).toContain('equivalent to 404');
+  });
+
+  it('a low-confidence assertion that misses does not fail the case, but is counted', async () => {
+    const speculative = [{
+      name: 'User with a guessed field', intent: 'happy path', method: 'GET', path: 'users/1',
+      headers: {}, category: 'positive',
+      assertions: [
+        { kind: 'status', expected: 200 },
+        { kind: 'jsonPathEquals', path: '$.ssn', value: '000', confidence: 'low' },
+      ],
+    }];
+    const result = await runTestingAgent({
+      url: hardenedUrl, description: 'fixture', llm: stubLlm(speculative),
+      runTool: toolRunner(hardenedUrl), context: CTX,
+    });
+    expect(result.summary.passed).toBe(1); // the case did not fail
+    expect(result.summary.failed).toBe(0);
+    expect(result.summary.softFailed).toBe(1); // the guess is surfaced, not hidden
+  });
+
+  it('a HIGH-confidence assertion that misses still fails the case', async () => {
+    const claim = [{
+      name: 'User with a wrongly claimed field', intent: 'happy path', method: 'GET', path: 'users/1',
+      headers: {}, category: 'positive',
+      assertions: [
+        { kind: 'status', expected: 200 },
+        { kind: 'jsonPathEquals', path: '$.ssn', value: '000' }, // high by default
+      ],
+    }];
+    const result = await runTestingAgent({
+      url: hardenedUrl, description: 'fixture', llm: stubLlm(claim),
+      runTool: toolRunner(hardenedUrl), context: CTX,
+    });
+    expect(result.summary.failed).toBe(1);
+    expect(result.summary.softFailed).toBe(0);
+  });
+
   it('writes one audit row per tool call', async () => {
     await runTestingAgent({
       url: hardenedUrl, description: 'fixture', llm: stubLlm(CONTRACT_CASES),

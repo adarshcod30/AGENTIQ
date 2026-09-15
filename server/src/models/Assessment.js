@@ -54,6 +54,9 @@ const endpointResultSchema = new mongoose.Schema({
   passed: Number,
   failed: Number,
   errored: Number,
+  // Low-confidence assertions that missed. Not failures (see run_test_case): the
+  // generator flagged them as guesses, so they are reported apart from `failed`.
+  softFailed: Number,
   status: String, // 'complete' | 'skipped' | 'failed'
   note: String,
   /**

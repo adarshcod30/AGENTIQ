@@ -14,20 +14,34 @@ import { defineTool } from '../registry.js';
 import { RISK_CLASS } from '../permissions.js';
 import { fetchGuarded } from '../egress.js';
 
+/**
+ * Per-assertion confidence, shared by every assertion kind.
+ *
+ * The generator sets "low" on an assertion it INFERRED rather than knows: a
+ * specific error code it is not sure the endpoint validates, a field name it is
+ * guessing at. A failed "low" assertion does NOT fail the case, because a guess
+ * that did not hold is not evidence the app is wrong. "high", which is the
+ * default and the meaning of an omitted flag, is a claim the endpoint must meet,
+ * so a failed "high" assertion is a real failure. The handler below is where
+ * this distinction is applied.
+ */
+const confidence = { confidence: z.enum(['high', 'low']).default('high') };
+
 /** The contract the LLM must emit (docs/02_TRD.md §6). */
 export const assertionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('status'), expected: z.number().int() }),
-  z.object({ kind: z.literal('responseTimeUnder'), ms: z.number().int().positive() }),
-  z.object({ kind: z.literal('jsonPathExists'), path: z.string() }),
-  z.object({ kind: z.literal('jsonPathEquals'), path: z.string(), value: z.unknown() }),
+  z.object({ kind: z.literal('status'), expected: z.number().int(), ...confidence }),
+  z.object({ kind: z.literal('responseTimeUnder'), ms: z.number().int().positive(), ...confidence }),
+  z.object({ kind: z.literal('jsonPathExists'), path: z.string(), ...confidence }),
+  z.object({ kind: z.literal('jsonPathEquals'), path: z.string(), value: z.unknown(), ...confidence }),
   z.object({
     kind: z.literal('jsonPathType'),
     path: z.string(),
     type: z.enum(['string', 'number', 'boolean', 'object', 'array', 'null']),
+    ...confidence,
   }),
-  z.object({ kind: z.literal('headerPresent'), name: z.string() }),
-  z.object({ kind: z.literal('headerEquals'), name: z.string(), value: z.string() }),
-  z.object({ kind: z.literal('bodyMatches'), pattern: z.string().max(200) }),
+  z.object({ kind: z.literal('headerPresent'), name: z.string(), ...confidence }),
+  z.object({ kind: z.literal('headerEquals'), name: z.string(), value: z.string(), ...confidence }),
+  z.object({ kind: z.literal('bodyMatches'), pattern: z.string().max(200), ...confidence }),
 ]);
 
 export const inputSchema = z.object({
@@ -49,7 +63,12 @@ export const outputSchema = z.object({
     expected: z.string(),
     actual: z.string(),
     pass: z.boolean(),
+    confidence: z.enum(['high', 'low']).default('high'),
   })),
+  // How many LOW-confidence assertions did not match. These did not fail the
+  // case (see the handler), but the count is surfaced so a report can say "N
+  // guesses did not hold" honestly, rather than hiding them entirely.
+  softFailed: z.number().int().default(0),
   error: z.string().nullable(),
 });
 
@@ -121,6 +140,29 @@ export function compileSafeRegex(pattern) {
 const show = (v) => (typeof v === 'string' ? v : JSON.stringify(v) ?? String(v));
 
 /**
+ * Status codes a generated test may reasonably guess between. When the model
+ * asks for one and the endpoint answers another IN THE SAME CLASS, that is a
+ * defensible reading of the contract, not a defect: 400 vs 404 for a bad or
+ * missing id, 401 vs 403 for an auth rejection. Both are a correct client
+ * error, so the assertion passes.
+ *
+ * The success family (200/201/204) is deliberately absent: there the exact code
+ * often IS the contract, and softening it would hide a real "a create answered
+ * 200, not 201" observation. Equivalence only ever holds WITHIN a class, so a
+ * 4xx guess can never mask a 2xx or 5xx actual, which is where the real signal
+ * (missing auth, an unhandled crash) lives.
+ */
+export const STATUS_EQUIVALENCE = [
+  new Set([400, 404, 422]),
+  new Set([401, 403]),
+];
+
+export function statusMatches(expected, actual) {
+  if (expected === actual) return true;
+  return STATUS_EQUIVALENCE.some((cls) => cls.has(expected) && cls.has(actual));
+}
+
+/**
  * Deterministic. Given the same response, always the same verdict.
  * Exported so tests can exercise it without any network.
  */
@@ -141,12 +183,23 @@ export function evaluateAssertions(assertions, response) {
   );
 
   return assertions.map((a) => {
-    switch (a.kind) {
-      case 'status':
+    // Carry the assertion's confidence onto its result. The switch decides the
+    // pass/fail; the handler reads confidence to decide whether a failure is a
+    // real one or a guess that did not hold.
+    const result = (() => {
+      switch (a.kind) {
+      case 'status': {
+        // 400 vs 404, 401 vs 403: a defensible contract guess passes (see
+        // STATUS_EQUIVALENCE). An exact miss outside those classes still fails.
+        const pass = statusMatches(a.expected, status);
+        const softened = pass && status !== a.expected;
         return {
-          kind: a.kind, expected: String(a.expected), actual: String(status),
-          pass: status === a.expected,
+          kind: a.kind,
+          expected: String(a.expected),
+          actual: softened ? `${status} (accepted: equivalent to ${a.expected})` : String(status),
+          pass,
         };
+      }
 
       case 'responseTimeUnder':
         return {
@@ -237,7 +290,9 @@ export function evaluateAssertions(assertions, response) {
       /* c8 ignore next 2 */
       default:
         return { kind: 'unknown', expected: '', actual: '', pass: false };
-    }
+      }
+    })();
+    return { ...result, confidence: a.confidence ?? 'high' };
   });
 }
 
@@ -268,7 +323,9 @@ export default defineTool({
         responseTimeMs: 0,
         assertions: input.assertions.map((a) => ({
           kind: a.kind, expected: '', actual: err.code ?? err.message, pass: false,
+          confidence: a.confidence ?? 'high',
         })),
+        softFailed: 0,
         error: err.message,
       };
     }
@@ -280,12 +337,19 @@ export default defineTool({
       responseTimeMs: res.durationMs,
     });
 
+    // A case FAILS only if a HIGH-confidence assertion failed. A low-confidence
+    // assertion that missed is a guess that did not hold, not a defect: it is
+    // counted in softFailed and does not sink the case.
+    const hardFailed = results.some((r) => !r.pass && r.confidence !== 'low');
+    const softFailed = results.filter((r) => !r.pass && r.confidence === 'low').length;
+
     return {
       name: input.name,
-      status: results.every((r) => r.pass) ? 'pass' : 'fail',
+      status: hardFailed ? 'fail' : 'pass',
       httpStatus: res.status,
       responseTimeMs: res.durationMs,
       assertions: results,
+      softFailed,
       error: null,
     };
   },

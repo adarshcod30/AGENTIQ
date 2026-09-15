@@ -102,10 +102,20 @@ Assertion kinds, and their exact shapes:
   { "kind": "headerEquals",      "name": "content-type", "value": "application/json" }
   { "kind": "bodyMatches",       "pattern": "^\\\\{" }
 
+Every assertion may also carry a confidence, "high" or "low" (default "high"):
+  { "kind": "status", "expected": 400, "confidence": "low" }
+Mark an assertion "low" when you are INFERRING the contract rather than certain
+of it: an error code you are not sure the endpoint validates, a field name you
+are guessing at. Mark it "high", or just omit the flag, when the handler code,
+the specification, or the endpoint's stated purpose makes the expectation
+certain. A "low" assertion that turns out wrong is NOT counted as a failure, so
+be honest: downgrade a genuine guess, never a claim you are sure of.
+
 Rules:
-  - Assert what a CORRECT endpoint should do, and only what you are confident of.
-    Never weaken an assertion to make it pass. Prefer a few high-confidence
-    assertions over many speculative ones.
+  - Assert what a CORRECT endpoint should do. Never weaken an assertion to make
+    it pass. Write the assertion you believe is right and set its confidence
+    honestly, rather than dropping a useful check because you are unsure: a
+    "low" check that misses costs nothing, and one that holds adds coverage.
   - Status codes: a normal successful GET returns 200 (a create returns 201). Do
     NOT assume an unsupported method returns 405: most frameworks, Express among
     them, return 404 for a method or route they do not handle, so expect 404
@@ -319,6 +329,9 @@ export function summarise(results, discarded = 0) {
     errored: results.filter((r) => r.status === 'error').length,
     discarded,
     assertionsEvaluated: results.reduce((n, r) => n + (r.assertions?.length ?? 0), 0),
+    // Low-confidence assertions that missed. These did not fail their case; the
+    // count travels up so the report can note the guesses that did not hold.
+    softFailed: results.reduce((n, r) => n + (r.softFailed ?? 0), 0),
   };
 }
 

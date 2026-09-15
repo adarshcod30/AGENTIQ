@@ -58,6 +58,18 @@ export function computeReadiness(assessment) {
     );
   }
 
+  // Low-confidence assertions that missed are the generator's own flagged
+  // guesses (run_test_case). They are neither blockers nor failures; note the
+  // total plainly so a reader knows a guess did not hold, without mistaking it
+  // for a defect.
+  const softTotal = tested.reduce((n, e) => n + (e.softFailed ?? 0), 0);
+  if (softTotal) {
+    warnings.push(
+      `${softTotal} low-confidence check(s) did not match. The generator flagged these `
+      + 'as guesses, so they are not counted as failures; review only if curious.',
+    );
+  }
+
   const skipped = (assessment.endpoints ?? []).filter((e) => e.status === 'skipped');
   if (skipped.length && !assessment.baseUrl) {
     warnings.push(`${skipped.length} endpoint(s) not tested: the app was not started.`);
@@ -90,6 +102,7 @@ export function buildReport(assessment, model) {
       endpointsSkipped: endpoints.filter((e) => e.status === 'skipped').length,
       assertionsPassed: passed,
       assertionsFailed: failed,
+      lowConfidenceUnmatched: tested.reduce((n, e) => n + (e.softFailed ?? 0), 0),
       endpointsWithFailures: tested.filter((e) => (e.failed ?? 0) > 0).map((e) => `${e.method} ${e.path}`),
     },
     security: {
@@ -150,7 +163,11 @@ export function renderReportMarkdown(report) {
   const t = report.testing;
   w('## Testing', '',
     `- Endpoints tested: ${t.endpointsTested} (skipped ${t.endpointsSkipped})`,
-    `- Assertions passed: ${t.assertionsPassed}, failed: ${t.assertionsFailed}`, '');
+    `- Assertions passed: ${t.assertionsPassed}, failed: ${t.assertionsFailed}`,
+    ...(t.lowConfidenceUnmatched
+      ? [`- Low-confidence checks that did not match (guesses, not failures): ${t.lowConfidenceUnmatched}`]
+      : []),
+    '');
   if (t.endpointsWithFailures.length) w('Endpoints with failures:', ...t.endpointsWithFailures.map((e) => `- ${e}`), '');
 
   w('## Security', '', `${report.security.total} finding(s).`, '');

@@ -241,6 +241,29 @@ describe('report service', () => {
     expect(readiness.warnings.some((w) => w.includes('/a'))).toBe(true);
   });
 
+  it('notes low-confidence misses as a soft warning, distinct from failures, and stays READY', () => {
+    const readiness = computeReadiness({
+      security: { findings: [] },
+      endpoints: [{ status: 'complete', passed: 3, failed: 0, softFailed: 2, method: 'GET', path: '/a' }],
+      clarifications: [],
+    });
+    expect(readiness.ready).toBe(true);
+    expect(readiness.warnings.some((w) => w.includes('low-confidence'))).toBe(true);
+    // A soft miss is NOT reported as a failing assertion.
+    expect(readiness.warnings.some((w) => w.includes('guess the contract wrong'))).toBe(false);
+  });
+
+  it('carries the low-confidence-unmatched count into the built report', () => {
+    const report = buildReport({
+      endpoints: [{ method: 'GET', path: '/a', status: 'complete', passed: 2, failed: 0, softFailed: 3 }],
+      security: { findings: [], summary: { bySeverity: {} }, notes: [] },
+      readiness: { ready: true, blockers: [], warnings: [] },
+      clarifications: [],
+    }, { framework: 'express', endpointCount: 1, dependencies: [] });
+    expect(report.testing.lowConfidenceUnmatched).toBe(3);
+    expect(renderReportMarkdown(report)).toContain('Low-confidence checks that did not match');
+  });
+
   it('renders a report to Markdown with the verdict', () => {
     const report = buildReport({
       endpoints: [{ method: 'GET', path: '/a', intent: 'gets a', status: 'complete', passed: 1, failed: 0 }],

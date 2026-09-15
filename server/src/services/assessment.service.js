@@ -284,7 +284,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
         method: endpoint.method, path: endpoint.path, intent: intent?.intent ?? null,
         confidence: intent?.confidence ?? null, status: 'complete',
         passed: result.summary?.passed ?? 0, failed: result.summary?.failed ?? 0,
-        errored: result.summary?.errored ?? 0,
+        errored: result.summary?.errored ?? 0, softFailed: result.summary?.softFailed ?? 0,
         ...(failures.length ? { failures } : {}),
       });
     } catch (err) {

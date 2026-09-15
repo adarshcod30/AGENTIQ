@@ -15,7 +15,7 @@ import {
   generationSchema, SYSTEM_PROMPT,
 } from '../src/agents/testing.agent.js';
 import { parseLooseJson, extractJson, unwrapArray, normaliseSyntax } from '../src/services/jsonRepair.js';
-import { evaluateAssertions } from '../src/mcp/tools/run_test_case.js';
+import { evaluateAssertions, statusMatches } from '../src/mcp/tools/run_test_case.js';
 import { generateJSON, LLM_ERROR, estimateCostUsd, providerOrder } from '../src/services/llm.js';
 
 /** A well-formed generation, as a good model would return it. */
@@ -354,8 +354,9 @@ describe('executeCases', () => {
       url: 'https://api.example.com', description: 'd', llm: stubLlm(GOOD),
     });
     await executeCases({ cases: [cases[1]], runTool });
-    // The negative case expected 404 and must still expect 404.
-    expect(seen).toEqual([{ kind: 'status', expected: 404 }]);
+    // The negative case expected 404 and must still expect 404. Confidence
+    // defaults to 'high', filled in by the schema, since the model omitted it.
+    expect(seen).toEqual([{ kind: 'status', expected: 404, confidence: 'high' }]);
   });
 });
 
@@ -368,6 +369,7 @@ describe('summarise', () => {
     ], 2);
     expect(s).toEqual({
       totalTests: 3, passed: 1, failed: 1, errored: 1, discarded: 2, assertionsEvaluated: 3,
+      softFailed: 0,
     });
   });
 });
@@ -398,6 +400,61 @@ describe('the model proposes assertions; it never judges them', () => {
     const b = evaluateAssertions(assertions, response);
     expect(a).toEqual(b);
     expect(a.every((r) => r.pass)).toBe(true);
+  });
+});
+
+// ── Status equivalence: a defensible client-error guess is not a failure ──────
+
+describe('status equivalence', () => {
+  it('accepts 404 where 400 was expected, and marks the actual as accepted', () => {
+    const [r] = evaluateAssertions(
+      [{ kind: 'status', expected: 400 }],
+      { status: 404, headers: {}, body: '{}', responseTimeMs: 1 },
+    );
+    expect(r.pass).toBe(true);
+    expect(r.actual).toContain('404');
+    expect(r.actual).toContain('equivalent to 400');
+  });
+
+  it('treats 401 and 403 as equivalent auth rejections', () => {
+    expect(statusMatches(401, 403)).toBe(true);
+    expect(statusMatches(403, 401)).toBe(true);
+  });
+
+  it('never crosses classes: a 4xx guess cannot mask a 2xx or 5xx', () => {
+    expect(statusMatches(400, 200)).toBe(false); // missing validation is a real signal
+    expect(statusMatches(404, 500)).toBe(false); // an unhandled crash is a real signal
+    expect(statusMatches(401, 404)).toBe(false); // different classes do not match
+  });
+
+  it('leaves an exact match unannotated', () => {
+    const [r] = evaluateAssertions(
+      [{ kind: 'status', expected: 200 }],
+      { status: 200, headers: {}, body: '{}', responseTimeMs: 1 },
+    );
+    expect(r.pass).toBe(true);
+    expect(r.actual).toBe('200');
+  });
+});
+
+// ── Confidence rides along on every result ────────────────────────────────────
+
+describe('assertion confidence', () => {
+  it('defaults to high when the assertion did not set it', () => {
+    const [r] = evaluateAssertions(
+      [{ kind: 'status', expected: 200 }],
+      { status: 200, headers: {}, body: '{}', responseTimeMs: 1 },
+    );
+    expect(r.confidence).toBe('high');
+  });
+
+  it('carries an explicit low confidence onto a missed assertion', () => {
+    const [r] = evaluateAssertions(
+      [{ kind: 'jsonPathEquals', path: '$.nope', value: 1, confidence: 'low' }],
+      { status: 200, headers: {}, body: '{"id":1}', responseTimeMs: 1 },
+    );
+    expect(r.pass).toBe(false);
+    expect(r.confidence).toBe('low');
   });
 });
 
