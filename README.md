@@ -211,15 +211,23 @@ machine is in [docs/03_App_Flow.md](docs/03_App_Flow.md).
 ### Assessing a whole project
 
 A single run tests one endpoint; an **assessment** takes a whole project end to end. Register it as
-a local folder, a public or private GitHub repo, or a deployed URL, and AGENTIQ walks a persisted
-state machine: **discover** the routes from the source (an AST pass, no LLM), **test** every
-endpoint (it starts the app in the process sandbox, or targets the deployed URL, or, for a cloned
-repo, runs static-only because that code is untrusted), **scan** with the eight probe families plus
-static secret, SAST, dependency and config analysis, then **judge readiness** and assemble a report
-with prioritised guidance: for each finding, why it matters, how to fix it, and concrete tips. A
-GitHub repo clones in the background, so the request never blocks: the project shows a live
-`cloning` status and flips to `ready` on its own. If the app cannot boot because it needs
-environment variables, provide them (by hand or from the project's own `.env`) and re-run.
+a local folder, an uploaded folder, a public or private GitHub repo, or a deployed URL, and AGENTIQ
+walks a persisted state machine: **discover** the routes from the source (an AST pass, no LLM),
+**test** every endpoint (it starts the app in the process sandbox, or targets the deployed URL, or,
+for a cloned or uploaded project, runs static-only because that code is untrusted), **scan** with the
+eight probe families plus static secret, SAST, dependency and config analysis, then **judge
+readiness** and assemble a report with prioritised guidance: for each finding, why it matters, how to
+fix it, and concrete tips. A GitHub repo clones in the background, so the request never blocks: the
+project shows a live `cloning` status and flips to `ready` on its own. If the app cannot boot because
+it needs environment variables, provide them (by hand or from the project's own `.env`) and re-run.
+
+**Scanning a folder from your own machine.** A local folder path only resolves on the machine running
+AGENTIQ, so the hosted site cannot read a visitor's disk. Two paths cover it. In the browser, **Upload
+a folder**: pick your project, and the source (minus `node_modules`, build output and binaries) is
+uploaded to a managed, untrusted workspace and scanned, never run. From the terminal, the
+[**AGENTIQ CLI**](cli/README.md): `agentiq scan ./my-project` does the same from a clone of this repo,
+and the scan shows up in your dashboard. Running AGENTIQ locally keeps the full folder workflow,
+including starting the app for functional tests.
 
 ### Bring your own accounts
 

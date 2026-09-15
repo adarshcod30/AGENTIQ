@@ -1,0 +1,25 @@
+{
+  "name": "agentiq",
+  "version": "1.0.0",
+  "description": "Scan a local project folder with AGENTIQ, from your terminal.",
+  "type": "module",
+  "bin": {
+    "agentiq": "bin/agentiq.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "keywords": [
+    "security",
+    "api-testing",
+    "scanner",
+    "cli",
+    "agentiq"
+  ],
+  "license": "MIT"
+}
