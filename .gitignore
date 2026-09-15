@@ -53,3 +53,7 @@ CLAUDE.local.md
 # local agent and editor files, never committed
 CLAUDE.md
 AGENTS.md
+
+# secrets, build output and local noise
+.env.local
+.next/
