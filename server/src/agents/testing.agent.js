@@ -127,7 +127,7 @@ Rules:
 
 /** Builds the user prompt, grounded in a spec operation when one is supplied. */
 export function buildPrompt({
-  url, method, description, count = 4, operation = null, categories = null,
+  url, method, description, count = 4, operation = null, categories = null, handlerSource = null,
 }) {
   const lines = [
     `Base URL: ${url}`,
@@ -136,6 +136,25 @@ export function buildPrompt({
     '',
     `Generate exactly ${count} test cases.`,
   ];
+
+  if (handlerSource) {
+    // Contract-anchoring: the endpoint's real handler code. It is the ground
+    // truth for the SHAPE of the contract (which status codes and fields exist,
+    // what inputs are validated, which branches to cover), which is what a
+    // one-line intent cannot convey. The expected BEHAVIOUR still comes from the
+    // purpose above, so a genuine defect is caught rather than rubber-stamped.
+    lines.push(
+      '',
+      'This is the endpoint\'s actual handler code:',
+      '```',
+      handlerSource,
+      '```',
+      'Read it to see the REAL status codes it returns, the fields it responds with, the',
+      'inputs it validates, and the branches worth covering (auth checks, not-found, bad',
+      'input). Target those cases precisely. But assert what the endpoint SHOULD do per its',
+      'purpose, not merely what this code happens to do, so a real bug is still caught.',
+    );
+  }
 
   if (categories?.length) {
     // Per-endpoint category selection (docs/10_AUTONOMOUS_PLATFORM.md §D): the
@@ -229,11 +248,12 @@ export function joinUrl(base, suffix) {
  * @returns {{ cases, discarded, discardReasons, tokens, provider, model, costUsd }}
  */
 export async function generateCases({
-  url, method = 'GET', description, count = 4, operation = null, categories = null, llm = generateJSON,
+  url, method = 'GET', description, count = 4, operation = null, categories = null,
+  handlerSource = null, llm = generateJSON,
 }) {
   const result = await llm({
     system: SYSTEM_PROMPT,
-    prompt: buildPrompt({ url, method, description, count, operation, categories }),
+    prompt: buildPrompt({ url, method, description, count, operation, categories, handlerSource }),
     schema: generationSchema,
     maxTokens: 2400,
   });
@@ -310,9 +330,11 @@ export function summarise(results, discarded = 0) {
  */
 export async function runTestingAgent({
   url, method = 'GET', description, count = 4, operation = null, categories = null,
-  runTool, context = {}, llm = generateJSON,
+  handlerSource = null, runTool, context = {}, llm = generateJSON,
 }) {
-  const generated = await generateCases({ url, method, description, count, operation, categories, llm });
+  const generated = await generateCases({
+    url, method, description, count, operation, categories, handlerSource, llm,
+  });
 
   if (generated.cases.length === 0) {
     // Every case was discarded. Fail visibly rather than returning an empty
@@ -430,8 +452,27 @@ export function sampleEndpointPath(operation) {
     .replace(/\{[A-Za-z0-9_]+\}/g, '1'); // OpenAPI-style /users/{id} -> /users/1
 }
 
+/**
+ * Pulls just this endpoint's handler out of its source file, anchored on the
+ * route's line and stopping at the next route definition (or a line cap). The
+ * generator gets the real handler, not the whole file, so the prompt stays small
+ * and focused on the contract this one endpoint actually implements.
+ */
+export function extractHandler(source, line, { maxLines = 55 } = {}) {
+  if (!source) return '';
+  const lines = String(source).split('\n');
+  const anchor = Math.max(0, (Number(line) || 1) - 1);
+  const routeRe = /\b(app|router|server)\.(get|post|put|patch|delete|options|head|all|use)\s*\(/;
+  const out = [];
+  for (let i = anchor; i < lines.length && out.length < maxLines; i += 1) {
+    if (i > anchor && routeRe.test(lines[i])) break; // the next route: this handler ended
+    out.push(lines[i]);
+  }
+  return out.join('\n').trim();
+}
+
 export async function runTestingAgentForEndpoint({
-  endpoint, baseUrl, intent = null, count = 4, runTool, context = {}, llm = generateJSON,
+  endpoint, baseUrl, intent = null, source = null, count = 4, runTool, context = {}, llm = generateJSON,
 }) {
   const operation = endpointToOperation(endpoint, { intent });
   const categories = selectCategories(endpoint, { intent });
@@ -443,7 +484,9 @@ export async function runTestingAgentForEndpoint({
   const outcome = await runTestingAgent({
     url: joinUrl(baseUrl, sampleEndpointPath(operation)),
     method: operation.method, description, count,
-    operation, categories, runTool, context, llm,
+    operation, categories,
+    handlerSource: extractHandler(source, endpoint.line),
+    runTool, context, llm,
   });
   return {
     ...outcome,

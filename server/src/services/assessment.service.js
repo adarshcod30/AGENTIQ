@@ -212,11 +212,14 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
 
   const endpoints = (model.endpoints ?? []).slice(0, MAX_ENDPOINTS);
   for (const endpoint of endpoints) {
-    // Intent: read the endpoint's source through fs_read, then infer.
+    // Intent: read the endpoint's source through fs_read, then infer. The same
+    // source is handed to test generation as contract-anchoring context.
     let intent = null;
+    let sourceContent = '';
     try {
       const src = endpoint.file ? await ctx.runTool('fs_read', { path: endpoint.file }, ctx.context) : null;
-      intent = await deps.inferIntent({ endpoint, source: src?.content ?? '' });
+      sourceContent = src?.content ?? '';
+      intent = await deps.inferIntent({ endpoint, source: sourceContent });
     } catch { /* intent is best-effort */ }
 
     if (intent && needsClarification(intent) && intent.clarification) {
@@ -240,6 +243,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
     try {
       const result = await deps.testEndpoint({
         endpoint, baseUrl: app.baseUrl, intent: intent?.intent ?? null,
+        source: sourceContent,
         runTool: ctx.runTool, context: ctx.context,
       });
       const failures = compactFailures(result.functional);

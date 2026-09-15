@@ -8,8 +8,33 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  selectCategories, endpointToOperation, runTestingAgentForEndpoint,
+  selectCategories, endpointToOperation, runTestingAgentForEndpoint, extractHandler,
 } from '../src/agents/testing.agent.js';
+
+const SOURCE = `app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+app.get('/api/admin/tasks', (req, res) => {
+  const token = req.get('authorization')?.replace(/^Bearer\\s+/i, '');
+  if (token !== ADMIN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+  return res.json({ tasks: listAll() });
+});
+
+app.get('/api/stats', (req, res) => res.json({ counts: {} }));`;
+
+describe('extractHandler', () => {
+  it('pulls just the handler at the given line, stopping at the next route', () => {
+    const snippet = extractHandler(SOURCE, 3); // the /api/admin/tasks route
+    expect(snippet).toContain("app.get('/api/admin/tasks'");
+    expect(snippet).toContain('return res.status(401)');
+    // It stops before the next route.
+    expect(snippet).not.toContain('/api/stats');
+  });
+
+  it('returns empty for no source', () => {
+    expect(extractHandler('', 3)).toBe('');
+    expect(extractHandler(null, 3)).toBe('');
+  });
+});
 
 const keys = (endpoint, opts) => selectCategories(endpoint, opts).map((c) => c.key).sort();
 
@@ -112,5 +137,22 @@ describe('runTestingAgentForEndpoint', () => {
     });
     expect(capture.prompt).toContain('POST /login');
     expect(capture.prompt).toContain('Missing body'); // a write-endpoint category
+  });
+
+  it('anchors generation in the endpoint handler source when it is given', async () => {
+    const capture = {};
+    await runTestingAgentForEndpoint({
+      endpoint: { method: 'GET', path: '/api/admin/tasks', params: [], file: 'src/app.js', line: 3 },
+      baseUrl: 'http://127.0.0.1:4001',
+      source: SOURCE,
+      llm: capturingLlm(capture),
+      runTool: async () => ({ status: 'pass', assertions: [] }),
+    });
+    // The real handler (with its 401 branch) is in the prompt, so the model can
+    // see the auth check rather than guessing a 200.
+    expect(capture.prompt).toContain('actual handler code');
+    expect(capture.prompt).toContain('return res.status(401)');
+    // And it is the FOCUSED handler, not the whole file.
+    expect(capture.prompt).not.toContain('/api/stats');
   });
 });
