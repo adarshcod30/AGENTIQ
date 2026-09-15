@@ -110,6 +110,51 @@ describe('POST /api/projects', () => {
   });
 });
 
+describe('POST /api/projects/upload', () => {
+  it('registers an uploaded folder as an untrusted, ready project', async () => {
+    const res = await request(app).post('/api/projects/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Uploaded',
+        files: [
+          { path: 'package.json', content: '{"name":"up","version":"1.0.0"}' },
+          { path: 'src/index.js', content: 'export const x = 1;\n' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.project.trusted).toBe(false);
+    expect(res.body.data.project.workspaceRoot).toBeTruthy();
+    expect(res.body.data.project.cloneStatus).toBe('ready');
+  });
+
+  it('refuses a file path that escapes the workspace', async () => {
+    const res = await request(app).post('/api/projects/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Evil', files: [{ path: '../../etc/passwd', content: 'x' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('UPLOAD_BAD_PATH');
+  });
+
+  it('works when hosted, since an upload IS the hosted folder path', async () => {
+    env.HOSTED = true;
+    try {
+      const res = await request(app).post('/api/projects/upload')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Hosted upload', files: [{ path: 'app.js', content: 'const a = 1;\n' }] });
+      expect(res.status).toBe(201);
+      expect(res.body.data.project.trusted).toBe(false);
+    } finally {
+      env.HOSTED = false;
+    }
+  });
+
+  it('requires authentication', async () => {
+    const res = await request(app).post('/api/projects/upload')
+      .send({ name: 'x', files: [{ path: 'a.js', content: 'x' }] });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('POST /api/projects/:id/discover', () => {
   async function registerVuln() {
     const res = await request(app).post('/api/projects')
@@ -117,6 +162,32 @@ describe('POST /api/projects/:id/discover', () => {
       .send({ name: 'Vulnerable fixture', workspaceRoot: VULN });
     return res.body.data.project.id;
   }
+
+  it('discovers an uploaded folder the same way as a local one', async () => {
+    const up = await request(app).post('/api/projects/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Uploaded express',
+        files: [
+          { path: 'package.json', content: JSON.stringify({ name: 'up', dependencies: { express: '^4.0.0' } }) },
+          {
+            path: 'server.js',
+            content: "const express = require('express');\nconst app = express();\n"
+              + "app.get('/ping', (req, res) => res.send('ok'));\n"
+              + "app.post('/echo', (req, res) => res.json(req.body));\n"
+              + 'app.listen(3000);\n',
+          },
+        ],
+      });
+    expect(up.status).toBe(201);
+
+    const res = await request(app).post(`/api/projects/${up.body.data.project.id}/discover`)
+      .set('Authorization', `Bearer ${token}`).send({});
+    expect(res.status).toBe(200);
+    const surface = res.body.data.discovery.endpoints.map((e) => `${e.method} ${e.path}`);
+    expect(surface).toContain('GET /ping');
+    expect(surface).toContain('POST /echo');
+  });
 
   it('discovers the real API surface with no LLM call', async () => {
     const id = await registerVuln();

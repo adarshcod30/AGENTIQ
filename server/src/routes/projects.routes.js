@@ -5,15 +5,30 @@
  * (server/tests/architecture.test.js enforces it): the filesystem work happens
  * in discovery.service.js, which drives the jail-bound tools.
  */
-import { Router } from 'express';
+import { Router, json } from 'express';
 import { z } from 'zod';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 import {
-  createProject, updateProjectEnv, importEnvFromFile, discoverProject, listProjects, getProject, DiscoveryError,
+  createProject, createUploadedProject, updateProjectEnv, importEnvFromFile,
+  discoverProject, listProjects, getProject, DiscoveryError,
 } from '../services/discovery.service.js';
 
 const router = Router();
+
+/**
+ * A folder upload carries a whole project's source, so it needs a bigger body
+ * than the global 1mb parser allows. app.js skips the global parser for this
+ * exact path, so this one runs instead. The hard limits are enforced again in
+ * the service (file count, per-file and total size).
+ */
+const uploadBody = json({ limit: '16mb' });
+
+/** One uploaded source file: its project-relative path and its text content. */
+const uploadFileSchema = z.object({
+  path: z.string().min(1).max(1024),
+  content: z.string(),
+});
 
 /** Opt-in runtime env for the app under test: a map of KEY -> value, local only. */
 const runtimeEnvSchema = z.record(z.string(), z.string()).optional();
@@ -52,6 +67,30 @@ router.post('/', protectRoute, async (req, res) => {
   }
   try {
     const project = await createProject({ userId: req.user._id, ...parsed.data });
+    return ok(res, { project }, 201);
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+/**
+ * Register a project from an uploaded folder. The client (browser folder picker
+ * or the CLI) sends the project's source files; the server writes them to a
+ * managed, untrusted workspace and scans it without ever running it. This is how
+ * a user assesses a folder from their own machine on the hosted site, where the
+ * server cannot read their disk.
+ */
+router.post('/upload', protectRoute, uploadBody, async (req, res) => {
+  const parsed = z.object({
+    name: z.string().trim().max(120).optional(),
+    files: z.array(uploadFileSchema).min(1, { error: 'The folder had no readable files' }),
+  }).safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Check the highlighted fields',
+      parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
+  }
+  try {
+    const project = await createUploadedProject({ userId: req.user._id, ...parsed.data });
     return ok(res, { project }, 201);
   } catch (err) {
     return sendError(res, err);

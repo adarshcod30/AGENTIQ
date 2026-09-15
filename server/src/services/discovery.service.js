@@ -10,6 +10,11 @@
  * creation, so a path that does not exist, or is not a directory, is refused
  * with a clear error before any project row is written.
  */
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { mkdir, writeFile, readdir, stat, rm } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { env } from '../config/env.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
@@ -104,6 +109,103 @@ export async function createProject({
       .catch((err) => logger.error({ err: err.message }, 'clone job crashed')));
   }
   return project;
+}
+
+/**
+ * Where an uploaded folder is written before it is scanned. A subdirectory per
+ * upload, under the OS temp dir, so nothing lands in the repo or a user path.
+ * Uploaded code is UNTRUSTED (exactly like a cloned repo): it is discovered and
+ * statically scanned, never started, so writing it here can never execute it.
+ */
+const UPLOAD_ROOT = path.join(os.tmpdir(), 'agentiq-uploads');
+const UPLOAD_MAX_FILES = 3000;
+const UPLOAD_MAX_FILE_BYTES = 512 * 1024; // 512 KB: source files, not build output
+const UPLOAD_MAX_TOTAL_BYTES = 12 * 1024 * 1024; // 12 MB of source across the folder
+const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // reap an upload workspace a day after it lands
+
+/**
+ * Best-effort reaping of old upload workspaces so the disk cannot fill on a small
+ * VM. An assessment runs within minutes of upload, so a day-old workspace is
+ * spent. Failures are swallowed: a full disk or a race must never fail an upload.
+ */
+async function sweepOldUploads() {
+  try {
+    const entries = await readdir(UPLOAD_ROOT, { withFileTypes: true });
+    const now = Date.now();
+    await Promise.all(entries.map(async (e) => {
+      if (!e.isDirectory()) return;
+      const p = path.join(UPLOAD_ROOT, e.name);
+      try {
+        const s = await stat(p);
+        if (now - s.mtimeMs > UPLOAD_TTL_MS) await rm(p, { recursive: true, force: true });
+      } catch { /* a concurrent reap or a vanished dir: ignore */ }
+    }));
+  } catch { /* UPLOAD_ROOT not created yet: nothing to sweep */ }
+}
+
+/**
+ * Registers a project from an uploaded folder: the browser (or the CLI) reads a
+ * folder the user picked, and sends `files` as [{ path, content }] with the
+ * project-relative path of each source file. This is the hosted-safe analogue of
+ * pointing at a local folder: the server can't see the user's disk, so the files
+ * come to it. Each path is contained under a fresh workspace dir (no absolute
+ * paths, no `..` escape), size-capped, and the project is marked untrusted so the
+ * pipeline scans it without ever running it.
+ */
+export async function createUploadedProject({ userId, name, files }) {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new DiscoveryError('No files were uploaded', 'EMPTY_UPLOAD', 400);
+  }
+  if (files.length > UPLOAD_MAX_FILES) {
+    throw new DiscoveryError(
+      `That folder has ${files.length} files, over the ${UPLOAD_MAX_FILES} limit. `
+      + 'Remove build output (node_modules, dist) or scan a public GitHub repo instead.',
+      'UPLOAD_TOO_MANY', 413,
+    );
+  }
+  void sweepOldUploads(); // fire-and-forget: reap yesterday's uploads first
+  const dir = path.join(UPLOAD_ROOT, `${Date.now().toString(36)}-${crypto.randomBytes(6).toString('hex')}`);
+  await mkdir(dir, { recursive: true });
+
+  let total = 0;
+  let written = 0;
+  for (const f of files) {
+    if (!f || typeof f.path !== 'string' || typeof f.content !== 'string') continue;
+    const rel = path.normalize(f.path);
+    // Refuse anything that could write outside the fresh workspace dir.
+    if (!rel || rel === '.' || path.isAbsolute(rel)
+      || rel.split(/[\\/]/).includes('..') || rel.includes('\0')) {
+      throw new DiscoveryError(`Unsafe file path in the upload: ${f.path}`, 'UPLOAD_BAD_PATH', 400);
+    }
+    const bytes = Buffer.byteLength(f.content, 'utf8');
+    if (bytes > UPLOAD_MAX_FILE_BYTES) continue; // skip a single oversized file, keep the rest
+    total += bytes;
+    if (total > UPLOAD_MAX_TOTAL_BYTES) {
+      throw new DiscoveryError(
+        `The folder is over ${Math.round(UPLOAD_MAX_TOTAL_BYTES / (1024 * 1024))} MB of source. `
+        + 'Scan a smaller folder or point at a public GitHub repo.',
+        'UPLOAD_TOO_LARGE', 413,
+      );
+    }
+    const dest = path.join(dir, rel);
+    if (dest !== dir && !dest.startsWith(dir + path.sep)) {
+      throw new DiscoveryError(`Unsafe file path in the upload: ${f.path}`, 'UPLOAD_BAD_PATH', 400);
+    }
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, f.content, 'utf8');
+    written += 1;
+  }
+  if (written === 0) {
+    throw new DiscoveryError('No usable source files were found in that folder', 'EMPTY_UPLOAD', 400);
+  }
+
+  return Project.create({
+    userId,
+    name: (typeof name === 'string' && name.trim()) ? name.trim() : 'Uploaded project',
+    workspaceRoot: realpathSync(dir),
+    trusted: false, // uploaded code is never started, only statically scanned
+    cloneStatus: 'ready',
+  });
 }
 
 /**
@@ -290,4 +392,6 @@ export async function getProject({ userId, projectId }) {
   return { project: { ...project.toJSON(), runtimeEnvKeys }, discovery: latest };
 }
 
-export default { createProject, updateProjectEnv, discoverProject, listProjects, getProject };
+export default {
+  createProject, createUploadedProject, updateProjectEnv, discoverProject, listProjects, getProject,
+};

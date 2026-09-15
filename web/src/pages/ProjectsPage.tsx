@@ -8,11 +8,12 @@
  * The workspace path is deliberately plain text: the server holds the filesystem
  * jail, and a path outside it is refused there, not hidden here.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FolderPlus, Play, FolderGit2, Clock, KeyRound, FileDown } from 'lucide-react';
+import { FolderPlus, FolderUp, Play, FolderGit2, Clock, KeyRound, FileDown } from 'lucide-react';
 import {
-  useProjects, useCreateProject, useUpdateProjectEnv, useImportProjectEnv,
+  useProjects, useCreateProject, useUploadProject, useUpdateProjectEnv, useImportProjectEnv,
   useAssessments, useCreateAssessment, useHealth,
 } from '@/hooks/api';
 import {
@@ -33,6 +34,56 @@ export function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
+// What a folder upload leaves behind: build output and binaries are worthless to
+// a source scan and would blow the size budget, so they are dropped in the
+// browser before anything is uploaded.
+const UPLOAD_IGNORED_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', '.nyc_output',
+  '.cache', '.turbo', '.parcel-cache', 'vendor', '__pycache__', '.venv', 'venv',
+  '.idea', '.vscode', '.svelte-kit', 'target', 'bin', 'obj',
+]);
+const UPLOAD_BINARY_RE = /\.(png|jpe?g|gif|webp|ico|bmp|svg|pdf|zip|gz|tgz|tar|rar|7z|mp4|mov|avi|mkv|mp3|wav|flac|woff2?|ttf|eot|otf|bin|exe|dll|so|dylib|class|jar|wasm|lock|map|node|psd|sqlite|db)$/i;
+const UPLOAD_MAX_FILE_BYTES = 512 * 1024;
+const UPLOAD_MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+const UPLOAD_MAX_FILES = 3000;
+
+/**
+ * Reads a folder the user picked into the [{ path, content }] list the upload
+ * endpoint expects. Build output and binaries are skipped, the top-level folder
+ * name is stripped so paths are project-root relative, and the same caps the
+ * server enforces are applied here so an over-large folder fails fast in the UI.
+ */
+export async function readPickedFolder(
+  fileList: FileList,
+): Promise<{ name: string; files: { path: string; content: string }[]; skipped: number }> {
+  const all = Array.from(fileList);
+  const topName = all[0]?.webkitRelativePath?.split('/')[0] || 'project';
+  const files: { path: string; content: string }[] = [];
+  let total = 0;
+  let skipped = 0;
+  for (const f of all) {
+    const rel = f.webkitRelativePath || f.name;
+    const parts = rel.split('/');
+    if (parts.some((p) => UPLOAD_IGNORED_DIRS.has(p)) || UPLOAD_BINARY_RE.test(f.name) || f.size > UPLOAD_MAX_FILE_BYTES) {
+      skipped += 1;
+      continue;
+    }
+    if (files.length >= UPLOAD_MAX_FILES) break;
+    const projPath = parts.slice(1).join('/') || f.name; // strip the picked folder itself
+    if (!projPath) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const content = await f.text();
+    total += content.length;
+    if (total > UPLOAD_MAX_TOTAL_BYTES) break;
+    files.push({ path: projPath, content });
+  }
+  return { name: topName, files, skipped };
+}
+
+// Non-standard attributes that turn a file input into a folder picker. Typed as
+// a loose object because they are not in React's JSX types.
+const FOLDER_PICKER_PROPS = { webkitdirectory: '', directory: '', mozdirectory: '' } as Record<string, string>;
+
 const ASSESS_CHIP: Record<string, string> = {
   COMPLETE: 'bg-success-50 text-success',
   FAILED: 'bg-danger-50 text-danger',
@@ -51,6 +102,8 @@ export function ProjectsPage() {
   const hosted = useHealth().data?.hosted ?? false;
   const projects = useProjects();
   const create = useCreateProject();
+  const upload = useUploadProject();
+  const folderRef = useRef<HTMLInputElement>(null);
   const updateEnv = useUpdateProjectEnv();
   const importEnv = useImportProjectEnv();
   const runAssessment = useCreateAssessment();
@@ -84,6 +137,25 @@ export function ProjectsPage() {
       setEnvText('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add the project.');
+    }
+  };
+
+  const onPickFolder = async (e: ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const list = e.target.files;
+    if (!list || list.length === 0) return;
+    try {
+      const { name: folderName, files, skipped } = await readPickedFolder(list);
+      if (files.length === 0) {
+        setError(`No readable source files in that folder (${skipped} build/binary files were skipped).`);
+        return;
+      }
+      await upload.mutateAsync({ name: name.trim() || folderName, files });
+      setName('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not upload the folder.');
+    } finally {
+      if (folderRef.current) folderRef.current.value = ''; // let the same folder be picked again
     }
   };
 
@@ -127,11 +199,8 @@ export function ProjectsPage() {
       <div>
         <h1 className="t-h1">Projects</h1>
         <p className="t-small mt-1 text-ink-muted">
-          {hosted
-            ? 'Point AGENTIQ at a deployed URL or a public GitHub repo. It discovers the routes, '
-              + 'scans for issues, and judges whether it is ready to deploy.'
-            : 'Point AGENTIQ at a project folder on this machine. It discovers the routes, runs the app, '
-              + 'tests it and scans it, then judges whether it is ready to deploy.'}
+          Upload a folder from your computer, give a deployed URL, or point at a public GitHub repo.
+          AGENTIQ discovers the routes, scans for security issues, and judges whether it is ready to deploy.
         </p>
       </div>
 
@@ -146,17 +215,25 @@ export function ProjectsPage() {
                 value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <p className="t-small text-ink-muted">
-              {hosted
-                ? 'Give a deployed URL, a public GitHub repo, or both. A deployed URL probes the live '
-                  + 'app; a GitHub repo is cloned and statically scanned, its code is never run. Scanning '
-                  + 'a folder on your own machine works when you run AGENTIQ locally.'
-                : 'Point AGENTIQ at a local folder, a deployed URL, a public GitHub repo, or a mix. A '
-                  + 'deployed URL tests the live app; a GitHub repo is cloned and statically scanned, its '
-                  + 'code is never run; a folder discovers routes and scans the source.'}
+              Choose any one: upload a folder from your computer, give a deployed URL, or point at a public
+              GitHub repo. An uploaded folder or a cloned repo is statically scanned and never run; a deployed
+              URL is probed live. Its functional tests run only when you run AGENTIQ on your own machine.
             </p>
+            <Field label="Upload a folder from your computer" htmlFor="proj-folder"
+              hint="Pick your project folder. Its source is uploaded and scanned for issues; node_modules, build output and binaries are skipped, and the code is never run.">
+              <div className="flex flex-wrap items-center gap-2">
+                <input ref={folderRef} id="proj-folder" type="file" multiple hidden
+                  onChange={(e) => void onPickFolder(e)} {...FOLDER_PICKER_PROPS} />
+                <Button type="button" variant="secondary" loading={upload.isPending}
+                  onClick={() => folderRef.current?.click()}>
+                  <FolderUp size={16} aria-hidden /> Choose folder
+                </Button>
+                <span className="t-small text-ink-subtle">Scans as soon as it uploads. No install needed.</span>
+              </div>
+            </Field>
             {!hosted && (
-              <Field label="Workspace path (folder)" htmlFor="proj-root"
-                hint="An absolute path to the project folder on the machine running AGENTIQ. Optional if you give a deployed URL.">
+              <Field label="Or a folder path on this machine" htmlFor="proj-root"
+                hint="An absolute path to a project folder on the machine running AGENTIQ. Local runs only; it also lets AGENTIQ start the app and run functional tests.">
                 <Input id="proj-root" mono placeholder="/Users/you/code/my-api"
                   value={root} onChange={(e) => setRoot(e.target.value)} />
               </Field>

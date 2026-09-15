@@ -275,6 +275,21 @@ export function useCreateProject() {
   });
 }
 
+/**
+ * Register a project from an uploaded folder. The caller reads the picked folder
+ * into [{ path, content }]; this ships it to the server, which writes it to an
+ * untrusted workspace and scans it without running it. This is how a folder on
+ * the user's own machine is assessed on the hosted site.
+ */
+export function useUploadProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; files: { path: string; content: string }[] }) =>
+      apiPost<{ project: Project }>('/projects/upload', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+}
+
 /** Set (or clear) a project's opt-in runtime env. Values go up; only keys come back. */
 export function useUpdateProjectEnv() {
   const qc = useQueryClient();

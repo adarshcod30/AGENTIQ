@@ -52,7 +52,14 @@ export function createApp({ logging = env.NODE_ENV !== 'test' } = {}) {
 
   if (logging) app.use(pinoHttp(httpLoggerOptions));
 
-  app.use(express.json({ limit: '1mb' }));
+  // 1mb is plenty for every API body except a folder upload, which carries a
+  // whole project's source. That one route parses its own larger body (see
+  // projects.routes.js), so the global parser skips it rather than raising the
+  // limit for everything and widening the DoS surface on every other endpoint.
+  const parseJson = express.json({ limit: '1mb' });
+  app.use((req, res, next) => (
+    req.path === '/api/projects/upload' ? next() : parseJson(req, res, next)
+  ));
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
 
