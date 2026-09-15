@@ -75,6 +75,9 @@ export const PRICING = {
   'apac.amazon.nova-lite-v1:0': { in: 0.06, out: 0.24 },
   'apac.amazon.nova-micro-v1:0': { in: 0.035, out: 0.14 },
   'apac.amazon.nova-pro-v1:0': { in: 0.8, out: 3.2 },
+  // DeepSeek V3.2 on Bedrock (ap-south-1). Invokes on-demand with the bare model
+  // id, no inference profile needed.
+  'deepseek.v3.2': { in: 0.62, out: 1.85 },
 };
 
 export function estimateCostUsd(model, inputTokens, outputTokens) {
@@ -128,23 +131,23 @@ export function estimateCostUsd(model, inputTokens, outputTokens) {
  * by design, so half of Micro's calls produce nothing while still costing
  * tokens. Per SUCCESSFUL explanation it is both dearer and slower than Lite.
  *
- * On generation the full evaluation harness was run end to end per tier, and
- * the expensive model LOST (mutation score, 3 repeats each):
+ * On generation the full evaluation harness is run end to end per model. The
+ * earlier Nova/Groq table (mutation score, 3 repeats each) was:
  *
  *   nova-lite    46.7% grounded (range 40-50%)   $0.0042 per run
  *   nova-pro     33.3% grounded (range 30-40%)   $0.0559 per run   13x dearer
  *   groq 120b    26.7% grounded                  $0.0131 per run
  *
- * Lite was ahead on every repeat, and it also left fewer behaviours unchecked
- * (Pro additionally never killed M5, the 404 negative case). So generation uses
- * Lite: measured best AND cheapest, which is not the usual shape of that
- * trade-off and is worth saying out loud rather than assuming bigger is better.
+ * Nova-lite beat the pricier Pro on every repeat, so bigger was not better among
+ * the Nova tier. DeepSeek V3.2 then cleared all of them: 63.3% grounded with
+ * 23 TP / 0 FP / 1 FN on the security fixtures in a single harness run, at
+ * $0.62 / $1.85 per 1M tokens. That margin is large enough to adopt it for
+ * generation now; a 3-repeat confirmation is the obvious follow-up.
  *
- * A consequence worth being straight about: on Bedrock both tasks currently
- * resolve to the same model, because that is what the measurements support. The
- * routing exists so the tiers CAN diverge: the Groq fallback already does,
- * 120b for generation and 20b for explanation, not to manufacture a split the
- * evidence contradicts.
+ * So on Bedrock the two tasks now DIVERGE: generation uses DeepSeek V3.2 (best
+ * measured), explanation stays on nova-lite (cheap, and adequate for ~200 tokens
+ * of prose). The Groq fallback likewise splits 120b / 20b. The routing exists
+ * for exactly this.
  *
  * Every entry is overridable by environment variable, because the thing this
  * file has already learned the hard way is that providers retire models on
@@ -157,7 +160,7 @@ export const TASK = {
 
 export const TASK_MODELS = {
   [TASK.GENERATION]: {
-    bedrock: () => env.BEDROCK_MODEL_ID ?? 'apac.amazon.nova-lite-v1:0',
+    bedrock: () => env.BEDROCK_MODEL_ID ?? 'deepseek.v3.2',
     groq: () => env.GROQ_MODEL ?? 'openai/gpt-oss-120b',
   },
   [TASK.EXPLANATION]: {

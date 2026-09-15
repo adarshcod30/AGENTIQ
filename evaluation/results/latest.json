@@ -1,15 +1,16 @@
 {
   "meta": {
-    "generatedAt": "2026-08-18 07:31 UTC",
+    "generatedAt": "2026-09-15 05:21 UTC",
     "node": "v22.23.2",
-    "durationSec": 121.7,
+    "commit": "2ff5d2d",
+    "durationSec": 309.28,
     "provider": "bedrock",
-    "model": "apac.amazon.nova-lite-v1:0",
+    "model": "deepseek.v3.2",
     "llmPrimary": "bedrock",
     "audit": {
-      "total": 522,
+      "total": 601,
       "byOutcome": {
-        "ok": 522
+        "ok": 601
       }
     }
   },
@@ -1338,12 +1339,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 12,
-        "baselinePassing": 10,
-        "baselineTotal": 12,
-        "generationMs": 2698,
+        "assertions": 10,
+        "baselinePassing": 6,
+        "baselineTotal": 10,
+        "generationMs": 9333,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M1",
@@ -1363,7 +1364,7 @@
           {
             "mutant": "M5",
             "category": "status-code",
-            "killed": true
+            "killed": false
           }
         ]
       },
@@ -1375,17 +1376,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 24,
-        "baselinePassing": 17,
-        "baselineTotal": 24,
-        "generationMs": 3153,
+        "assertions": 19,
+        "baselinePassing": 18,
+        "baselineTotal": 19,
+        "generationMs": 9343,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1402,17 +1403,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 7,
-        "baselinePassing": 3,
-        "baselineTotal": 7,
-        "generationMs": 2068,
+        "assertions": 16,
+        "baselinePassing": 16,
+        "baselineTotal": 16,
+        "generationMs": 8601,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1431,106 +1432,106 @@
         "mode": "grounded",
         "target": "admin-users",
         "path": "/admin/users",
-        "generated": 5,
-        "discarded": 0,
-        "discardReasons": [],
-        "assertions": 6,
-        "baselinePassing": 4,
-        "baselineTotal": 6,
-        "generationMs": 1971,
-        "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
-        "kills": [
-          {
-            "mutant": "M6",
-            "category": "auth",
-            "killed": true
-          }
-        ]
-      },
-      {
-        "repeat": 1,
-        "mode": "ungrounded",
-        "target": "users-by-id",
-        "path": "/users/1",
-        "generated": 5,
-        "discarded": 0,
-        "discardReasons": [],
-        "assertions": 10,
-        "baselinePassing": 8,
-        "baselineTotal": 10,
-        "generationMs": 2397,
-        "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
-        "kills": [
-          {
-            "mutant": "M1",
-            "category": "status-code",
-            "killed": true
-          },
-          {
-            "mutant": "M2",
-            "category": "missing-field",
-            "killed": true
-          },
-          {
-            "mutant": "M3",
-            "category": "wrong-type",
-            "killed": false
-          },
-          {
-            "mutant": "M5",
-            "category": "status-code",
-            "killed": false
-          }
-        ]
-      },
-      {
-        "repeat": 1,
-        "mode": "ungrounded",
-        "target": "items",
-        "path": "/items",
-        "generated": 5,
-        "discarded": 0,
-        "discardReasons": [],
-        "assertions": 17,
-        "baselinePassing": 15,
-        "baselineTotal": 17,
-        "generationMs": 2790,
-        "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
-        "kills": [
-          {
-            "mutant": "M4",
-            "category": "content-type",
-            "killed": false
-          },
-          {
-            "mutant": "M7",
-            "category": "missing-field",
-            "killed": true
-          }
-        ]
-      },
-      {
-        "repeat": 1,
-        "mode": "ungrounded",
-        "target": "items-filtered",
-        "path": "/items?ownerId=1",
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
         "assertions": 8,
-        "baselinePassing": 4,
+        "baselinePassing": 5,
         "baselineTotal": 8,
-        "generationMs": 2405,
+        "generationMs": 8038,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
+        "kills": [
+          {
+            "mutant": "M6",
+            "category": "auth",
+            "killed": true
+          }
+        ]
+      },
+      {
+        "repeat": 1,
+        "mode": "ungrounded",
+        "target": "users-by-id",
+        "path": "/users/1",
+        "generated": 5,
+        "discarded": 0,
+        "discardReasons": [],
+        "assertions": 18,
+        "baselinePassing": 17,
+        "baselineTotal": 18,
+        "generationMs": 11157,
+        "provider": "bedrock",
+        "model": "deepseek.v3.2",
+        "kills": [
+          {
+            "mutant": "M1",
+            "category": "status-code",
+            "killed": true
+          },
+          {
+            "mutant": "M2",
+            "category": "missing-field",
+            "killed": true
+          },
+          {
+            "mutant": "M3",
+            "category": "wrong-type",
+            "killed": true
+          },
+          {
+            "mutant": "M5",
+            "category": "status-code",
+            "killed": true
+          }
+        ]
+      },
+      {
+        "repeat": 1,
+        "mode": "ungrounded",
+        "target": "items",
+        "path": "/items",
+        "generated": 5,
+        "discarded": 0,
+        "discardReasons": [],
+        "assertions": 19,
+        "baselinePassing": 17,
+        "baselineTotal": 19,
+        "generationMs": 9528,
+        "provider": "bedrock",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
+          },
+          {
+            "mutant": "M7",
+            "category": "missing-field",
+            "killed": true
+          }
+        ]
+      },
+      {
+        "repeat": 1,
+        "mode": "ungrounded",
+        "target": "items-filtered",
+        "path": "/items?ownerId=1",
+        "generated": 5,
+        "discarded": 0,
+        "discardReasons": [],
+        "assertions": 13,
+        "baselinePassing": 11,
+        "baselineTotal": 13,
+        "generationMs": 7001,
+        "provider": "bedrock",
+        "model": "deepseek.v3.2",
+        "kills": [
+          {
+            "mutant": "M4",
+            "category": "content-type",
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1552,12 +1553,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 6,
-        "baselinePassing": 4,
-        "baselineTotal": 6,
-        "generationMs": 2080,
+        "assertions": 13,
+        "baselinePassing": 10,
+        "baselineTotal": 13,
+        "generationMs": 8977,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M6",
@@ -1574,49 +1575,49 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 9,
-        "baselinePassing": 8,
-        "baselineTotal": 9,
-        "generationMs": 2466,
-        "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
-        "kills": [
-          {
-            "mutant": "M1",
-            "category": "status-code",
-            "killed": true
-          },
-          {
-            "mutant": "M2",
-            "category": "missing-field",
-            "killed": true
-          },
-          {
-            "mutant": "M3",
-            "category": "wrong-type",
-            "killed": false
-          },
-          {
-            "mutant": "M5",
-            "category": "status-code",
-            "killed": true
-          }
-        ]
-      },
-      {
-        "repeat": 2,
-        "mode": "grounded",
-        "target": "items",
-        "path": "/items",
-        "generated": 5,
-        "discarded": 0,
-        "discardReasons": [],
-        "assertions": 22,
+        "assertions": 20,
         "baselinePassing": 18,
-        "baselineTotal": 22,
-        "generationMs": 4012,
+        "baselineTotal": 20,
+        "generationMs": 9058,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
+        "kills": [
+          {
+            "mutant": "M1",
+            "category": "status-code",
+            "killed": true
+          },
+          {
+            "mutant": "M2",
+            "category": "missing-field",
+            "killed": true
+          },
+          {
+            "mutant": "M3",
+            "category": "wrong-type",
+            "killed": false
+          },
+          {
+            "mutant": "M5",
+            "category": "status-code",
+            "killed": true
+          }
+        ]
+      },
+      {
+        "repeat": 2,
+        "mode": "grounded",
+        "target": "items",
+        "path": "/items",
+        "generated": 5,
+        "discarded": 0,
+        "discardReasons": [],
+        "assertions": 12,
+        "baselinePassing": 10,
+        "baselineTotal": 12,
+        "generationMs": 7268,
+        "provider": "bedrock",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
@@ -1638,17 +1639,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 7,
-        "baselinePassing": 3,
-        "baselineTotal": 7,
-        "generationMs": 2121,
+        "assertions": 19,
+        "baselinePassing": 19,
+        "baselineTotal": 19,
+        "generationMs": 8778,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1670,12 +1671,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 6,
-        "baselinePassing": 4,
-        "baselineTotal": 6,
-        "generationMs": 2083,
+        "assertions": 8,
+        "baselinePassing": 6,
+        "baselineTotal": 8,
+        "generationMs": 6080,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M6",
@@ -1692,56 +1693,54 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 10,
-        "baselinePassing": 8,
-        "baselineTotal": 10,
-        "generationMs": 2499,
-        "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
-        "kills": [
-          {
-            "mutant": "M1",
-            "category": "status-code",
-            "killed": true
-          },
-          {
-            "mutant": "M2",
-            "category": "missing-field",
-            "killed": true
-          },
-          {
-            "mutant": "M3",
-            "category": "wrong-type",
-            "killed": false
-          },
-          {
-            "mutant": "M5",
-            "category": "status-code",
-            "killed": false
-          }
-        ]
-      },
-      {
-        "repeat": 2,
-        "mode": "ungrounded",
-        "target": "items",
-        "path": "/items",
-        "generated": 4,
-        "discarded": 1,
-        "discardReasons": [
-          "Too big: expected array to have <=8 items"
-        ],
         "assertions": 17,
-        "baselinePassing": 14,
+        "baselinePassing": 17,
         "baselineTotal": 17,
-        "generationMs": 3325,
+        "generationMs": 9487,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
+        "kills": [
+          {
+            "mutant": "M1",
+            "category": "status-code",
+            "killed": true
+          },
+          {
+            "mutant": "M2",
+            "category": "missing-field",
+            "killed": true
+          },
+          {
+            "mutant": "M3",
+            "category": "wrong-type",
+            "killed": true
+          },
+          {
+            "mutant": "M5",
+            "category": "status-code",
+            "killed": true
+          }
+        ]
+      },
+      {
+        "repeat": 2,
+        "mode": "ungrounded",
+        "target": "items",
+        "path": "/items",
+        "generated": 5,
+        "discarded": 0,
+        "discardReasons": [],
+        "assertions": 18,
+        "baselinePassing": 16,
+        "baselineTotal": 18,
+        "generationMs": 8635,
+        "provider": "bedrock",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1758,17 +1757,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 9,
-        "baselinePassing": 7,
-        "baselineTotal": 9,
-        "generationMs": 2360,
+        "assertions": 17,
+        "baselinePassing": 16,
+        "baselineTotal": 17,
+        "generationMs": 8333,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1778,7 +1777,7 @@
           {
             "mutant": "M8",
             "category": "boundary",
-            "killed": false
+            "killed": true
           }
         ]
       },
@@ -1790,12 +1789,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 6,
-        "baselinePassing": 4,
-        "baselineTotal": 6,
-        "generationMs": 1915,
+        "assertions": 13,
+        "baselinePassing": 10,
+        "baselineTotal": 13,
+        "generationMs": 7689,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M6",
@@ -1812,12 +1811,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 9,
-        "baselinePassing": 8,
-        "baselineTotal": 9,
-        "generationMs": 2017,
+        "assertions": 10,
+        "baselinePassing": 10,
+        "baselineTotal": 10,
+        "generationMs": 5894,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M1",
@@ -1849,17 +1848,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 23,
-        "baselinePassing": 17,
-        "baselineTotal": 23,
-        "generationMs": 3413,
+        "assertions": 19,
+        "baselinePassing": 18,
+        "baselineTotal": 19,
+        "generationMs": 11093,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1876,17 +1875,17 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 9,
-        "baselinePassing": 4,
-        "baselineTotal": 9,
-        "generationMs": 2185,
+        "assertions": 18,
+        "baselinePassing": 17,
+        "baselineTotal": 18,
+        "generationMs": 10122,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1908,12 +1907,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 7,
-        "baselinePassing": 4,
-        "baselineTotal": 7,
-        "generationMs": 1883,
+        "assertions": 14,
+        "baselinePassing": 10,
+        "baselineTotal": 14,
+        "generationMs": 10821,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M6",
@@ -1930,12 +1929,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 10,
-        "baselinePassing": 8,
-        "baselineTotal": 10,
-        "generationMs": 2155,
+        "assertions": 21,
+        "baselinePassing": 20,
+        "baselineTotal": 21,
+        "generationMs": 10095,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M1",
@@ -1950,7 +1949,7 @@
           {
             "mutant": "M3",
             "category": "wrong-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M5",
@@ -1968,16 +1967,16 @@
         "discarded": 0,
         "discardReasons": [],
         "assertions": 13,
-        "baselinePassing": 10,
+        "baselinePassing": 13,
         "baselineTotal": 13,
-        "generationMs": 2566,
+        "generationMs": 8001,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
@@ -1994,22 +1993,22 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 12,
-        "baselinePassing": 3,
-        "baselineTotal": 12,
-        "generationMs": 2923,
+        "assertions": 18,
+        "baselinePassing": 17,
+        "baselineTotal": 18,
+        "generationMs": 9768,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M4",
             "category": "content-type",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M7",
             "category": "missing-field",
-            "killed": false
+            "killed": true
           },
           {
             "mutant": "M8",
@@ -2026,12 +2025,12 @@
         "generated": 5,
         "discarded": 0,
         "discardReasons": [],
-        "assertions": 6,
-        "baselinePassing": 4,
-        "baselineTotal": 6,
-        "generationMs": 2160,
+        "assertions": 15,
+        "baselinePassing": 10,
+        "baselineTotal": 15,
+        "generationMs": 9947,
         "provider": "bedrock",
-        "model": "apac.amazon.nova-lite-v1:0",
+        "model": "deepseek.v3.2",
         "kills": [
           {
             "mutant": "M6",
@@ -2042,11 +2041,11 @@
       }
     ],
     "generation": {
-      "inputTokens": 13428,
-      "outputTokens": 14387,
-      "costUsd": 0.00425856,
+      "inputTokens": 24012,
+      "outputTokens": 16909,
+      "costUsd": 0,
       "calls": 24,
-      "ms": 59645
+      "ms": 213047
     },
     "byMode": {
       "grounded": {
@@ -2057,38 +2056,38 @@
         "perRepeat": [
           {
             "repeat": 1,
-            "killed": 5,
+            "killed": 6,
             "total": 10,
-            "score": 0.5
+            "score": 0.6
           },
           {
             "repeat": 2,
-            "killed": 5,
+            "killed": 6,
             "total": 10,
-            "score": 0.5
+            "score": 0.6
           },
           {
             "repeat": 3,
-            "killed": 5,
+            "killed": 7,
             "total": 10,
-            "score": 0.5
+            "score": 0.7
           }
         ],
-        "scoreMin": 0.5,
-        "scoreMax": 0.5,
+        "scoreMin": 0.6,
+        "scoreMax": 0.7,
         "suites": 12,
         "casesGenerated": 60,
         "casesDiscarded": 0,
-        "assertions": 141,
-        "baselinePassRate": 0.709,
+        "assertions": 173,
+        "baselinePassRate": 0.884,
         "mutantsEvaluated": 30,
-        "mutantsKilled": 15,
-        "mutationScore": 0.5,
+        "mutantsKilled": 19,
+        "mutationScore": 0.633,
         "byCategory": {
           "status-code": {
-            "killed": 6,
+            "killed": 5,
             "total": 6,
-            "score": 1
+            "score": 0.833
           },
           "missing-field": {
             "killed": 6,
@@ -2101,9 +2100,9 @@
             "score": 0
           },
           "content-type": {
-            "killed": 0,
+            "killed": 5,
             "total": 6,
-            "score": 0
+            "score": 0.833
           },
           "boundary": {
             "killed": 0,
@@ -2130,11 +2129,11 @@
             "total": 3
           },
           "M5": {
-            "killed": 3,
+            "killed": 2,
             "total": 3
           },
           "M4": {
-            "killed": 0,
+            "killed": 5,
             "total": 6
           },
           "M7": {
@@ -2159,58 +2158,58 @@
         "perRepeat": [
           {
             "repeat": 1,
-            "killed": 4,
+            "killed": 8,
             "total": 10,
-            "score": 0.4
+            "score": 0.8
           },
           {
             "repeat": 2,
-            "killed": 5,
+            "killed": 10,
             "total": 10,
-            "score": 0.5
+            "score": 1
           },
           {
             "repeat": 3,
-            "killed": 4,
+            "killed": 8,
             "total": 10,
-            "score": 0.4
+            "score": 0.8
           }
         ],
-        "scoreMin": 0.4,
-        "scoreMax": 0.5,
+        "scoreMin": 0.8,
+        "scoreMax": 1,
         "suites": 12,
-        "casesGenerated": 59,
-        "casesDiscarded": 1,
-        "assertions": 124,
-        "baselinePassRate": 0.718,
+        "casesGenerated": 60,
+        "casesDiscarded": 0,
+        "assertions": 195,
+        "baselinePassRate": 0.892,
         "mutantsEvaluated": 30,
-        "mutantsKilled": 13,
-        "mutationScore": 0.433,
+        "mutantsKilled": 26,
+        "mutationScore": 0.867,
         "byCategory": {
           "status-code": {
-            "killed": 3,
+            "killed": 5,
             "total": 6,
-            "score": 0.5
+            "score": 0.833
           },
           "missing-field": {
-            "killed": 7,
+            "killed": 8,
             "total": 9,
-            "score": 0.778
+            "score": 0.889
           },
           "wrong-type": {
-            "killed": 0,
+            "killed": 3,
             "total": 3,
-            "score": 0
+            "score": 1
           },
           "content-type": {
-            "killed": 0,
+            "killed": 6,
             "total": 6,
-            "score": 0
+            "score": 1
           },
           "boundary": {
-            "killed": 0,
+            "killed": 1,
             "total": 3,
-            "score": 0
+            "score": 0.333
           },
           "auth": {
             "killed": 3,
@@ -2228,23 +2227,23 @@
             "total": 3
           },
           "M3": {
-            "killed": 0,
+            "killed": 3,
             "total": 3
           },
           "M5": {
-            "killed": 0,
+            "killed": 2,
             "total": 3
           },
           "M4": {
-            "killed": 0,
+            "killed": 6,
             "total": 6
           },
           "M7": {
-            "killed": 4,
+            "killed": 5,
             "total": 6
           },
           "M8": {
-            "killed": 0,
+            "killed": 1,
             "total": 3
           },
           "M6": {
@@ -2255,9 +2254,9 @@
       }
     },
     "ablation": {
-      "grounded": 0.5,
-      "ungrounded": 0.433,
-      "deltaPoints": 6.7
+      "grounded": 0.633,
+      "ungrounded": 0.867,
+      "deltaPoints": -23.4
     }
   }
 }
