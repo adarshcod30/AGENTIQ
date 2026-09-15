@@ -36,9 +36,17 @@ describe('crypto.service', () => {
     expect(enc).not.toContain('ghp_supersecrettoken123');
     expect(decryptSecret(enc)).toBe('ghp_supersecrettoken123');
 
-    // Flip the last char of the ciphertext: the GCM auth tag rejects it.
+    // Tamper with the ciphertext bytes, not its base64url characters. The
+    // ciphertext is 23 bytes, so the final base64url character carries four
+    // data bits and two unused low bits, and swapping it between 'A' and 'B'
+    // moves only those unused bits. Whenever that character landed in
+    // {A, B, C, D} the "tampered" token decoded to the identical bytes, GCM
+    // verified it happily, and this test failed on about one run in sixteen.
+    // Flipping a byte before re-encoding always changes what GCM sees.
     const parts = enc.split(':');
-    parts[3] = parts[3].slice(0, -1) + (parts[3].endsWith('A') ? 'B' : 'A');
+    const ct = Buffer.from(parts[3], 'base64url');
+    ct[0] ^= 0xff;
+    parts[3] = ct.toString('base64url');
     expect(() => decryptSecret(parts.join(':'))).toThrow();
   });
 });
