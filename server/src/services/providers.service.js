@@ -105,6 +105,30 @@ export function providerSpecs() {
   }));
 }
 
+/**
+ * Re-verify a stored credential with a live call and update its verified flag.
+ * If an active provider stops verifying, it is deactivated so generation falls
+ * back to the platform keys cleanly rather than failing every call.
+ */
+export async function testProviderCredential({ userId, provider }) {
+  assertProvider(provider);
+  const row = await AiProviderCredential.findOne({ userId, provider }).select('+secret');
+  if (!row) throw new ProviderError('That provider is not configured.', 'NOT_CONFIGURED', 404);
+  let secrets;
+  try {
+    secrets = JSON.parse(decryptSecret(row.secret));
+  } catch {
+    throw new ProviderError('The stored credential could not be read; re-enter it.', 'DECRYPT_FAILED', 400);
+  }
+  const config = row.config ? Object.fromEntries(row.config) : {};
+  const check = await verifyAiProvider({ provider, credentials: secrets, config });
+  row.verified = check.ok;
+  row.verifiedAt = check.ok ? new Date() : null;
+  if (!check.ok && row.active) row.active = false;
+  await row.save();
+  return { provider, verified: check.ok, active: row.active, error: check.ok ? null : check.error };
+}
+
 /** Make one verified provider active, and deactivate the rest. */
 export async function setActiveProvider({ userId, provider }) {
   assertProvider(provider);
@@ -147,6 +171,6 @@ export async function getActiveProviderConfig({ userId }) {
 }
 
 export default {
-  setProviderCredential, listProviderCredentials, providerSpecs,
+  setProviderCredential, listProviderCredentials, providerSpecs, testProviderCredential,
   setActiveProvider, clearActiveProvider, removeProviderCredential, getActiveProviderConfig,
 };

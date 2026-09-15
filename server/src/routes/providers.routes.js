@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 import {
-  setProviderCredential, listProviderCredentials, providerSpecs,
+  setProviderCredential, listProviderCredentials, providerSpecs, testProviderCredential,
   setActiveProvider, clearActiveProvider, removeProviderCredential, ProviderError,
 } from '../services/providers.service.js';
 
@@ -35,6 +35,14 @@ router.put('/:provider', protectRoute, async (req, res) => {
   try {
     const result = await setProviderCredential({ userId: req.user._id, provider: req.params.provider, fields: parsed.data.fields });
     return ok(res, result);
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+router.post('/:provider/test', protectRoute, async (req, res) => {
+  try {
+    return ok(res, await testProviderCredential({ userId: req.user._id, provider: req.params.provider }));
   } catch (err) {
     return sendError(res, err);
   }

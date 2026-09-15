@@ -80,6 +80,12 @@ export const PRICING = {
   // DeepSeek V3.2 on Bedrock (ap-south-1). Invokes on-demand with the bare model
   // id, no inference profile needed.
   'deepseek.v3.2': { in: 0.62, out: 1.85 },
+  // BYOK default-model list prices (the providers' own published rates). A user
+  // who picks a different model simply shows "unknown" rather than a guessed cost.
+  'gpt-4o-mini': { in: 0.15, out: 0.6 },
+  'claude-3-5-haiku-latest': { in: 0.8, out: 4.0 },
+  'gemini-1.5-flash': { in: 0.075, out: 0.3 },
+  'grok-2-latest': { in: 2.0, out: 10.0 },
 };
 
 export function estimateCostUsd(model, inputTokens, outputTokens) {

@@ -355,6 +355,17 @@ export function useSaveProvider() {
   });
 }
 
+/** Re-verify a stored credential with a live call. */
+export function useTestProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string }) =>
+      apiPost<{ provider: string; verified: boolean; active: boolean; error: string | null }>(
+        `/providers/${vars.provider}/test`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+  });
+}
+
 export function useActivateProvider() {
   const qc = useQueryClient();
   return useMutation({

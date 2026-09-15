@@ -13,6 +13,7 @@ import {
   useHealth, useGrants, useRevokeGrant, useSettingsConfig,
   useConnections, useSetConnection, useRemoveConnection, useOAuthStart,
   useProviders, useSaveProvider, useActivateProvider, useDeactivateProviders, useRemoveProvider,
+  useTestProvider,
 } from '@/hooks/api';
 import { useAuthStore } from '@/store/auth';
 import {
@@ -304,9 +305,7 @@ function ConnectionRow({ provider, conn, oauthAvailable }: {
 function AiProviderCard() {
   const { data, isLoading } = useProviders();
   const save = useSaveProvider();
-  const activate = useActivateProvider();
   const deactivate = useDeactivateProviders();
-  const remove = useRemoveProvider();
 
   const specs: AiProviderSpec[] = data?.specs ?? [];
   const providers: AiProviderStatus[] = data?.providers ?? [];
@@ -378,21 +377,7 @@ function AiProviderCard() {
         {configured.length > 0 && (
           <div className="space-y-2">
             {configured.map((p) => (
-              <div key={p.provider} className="flex flex-wrap items-center gap-2 rounded-[8px] border border-line p-3">
-                <span className="w-24 text-[13px] font-medium text-ink">{label(p.provider)}</span>
-                {p.verified
-                  ? <Chip className="bg-success-50 text-success">verified</Chip>
-                  : <Chip className="bg-danger-50 text-danger">unverified</Chip>}
-                {p.active && <Chip className="bg-accent text-white">active</Chip>}
-                {p.config.model && <span className="t-mono text-[12px] text-ink-subtle">{p.config.model}</span>}
-                <div className="flex-1" />
-                {p.verified && !p.active && (
-                  <Button size="sm" variant="secondary" loading={activate.isPending}
-                    onClick={() => activate.mutate({ provider: p.provider })}>Make active</Button>
-                )}
-                <Button size="sm" variant="secondary" loading={remove.isPending}
-                  onClick={() => remove.mutate({ provider: p.provider })}>Remove</Button>
-              </div>
+              <ConfiguredRow key={p.provider} p={p} label={label(p.provider)} />
             ))}
           </div>
         )}
@@ -422,5 +407,45 @@ function AiProviderCard() {
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** One configured provider: test the live connection, activate it, or remove it. */
+function ConfiguredRow({ p, label }: { p: AiProviderStatus; label: string }) {
+  const test = useTestProvider();
+  const activate = useActivateProvider();
+  const remove = useRemoveProvider();
+
+  const testResult = test.data
+    ? (test.data.verified
+      ? { tone: 'success' as const, text: 'Connection OK.' }
+      : { tone: 'danger' as const, text: test.data.error ?? 'Verification failed.' })
+    : null;
+
+  return (
+    <div className="rounded-[8px] border border-line p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-24 text-[13px] font-medium text-ink">{label}</span>
+        {p.verified
+          ? <Chip className="bg-success-50 text-success">verified</Chip>
+          : <Chip className="bg-danger-50 text-danger">unverified</Chip>}
+        {p.active && <Chip className="bg-accent text-white">active</Chip>}
+        {p.config.model && <span className="t-mono text-[12px] text-ink-subtle">{p.config.model}</span>}
+        <div className="flex-1" />
+        <Button size="sm" variant="secondary" loading={test.isPending}
+          onClick={() => test.mutate({ provider: p.provider })}>Test connection</Button>
+        {p.verified && !p.active && (
+          <Button size="sm" variant="secondary" loading={activate.isPending}
+            onClick={() => activate.mutate({ provider: p.provider })}>Make active</Button>
+        )}
+        <Button size="sm" variant="secondary" loading={remove.isPending}
+          onClick={() => remove.mutate({ provider: p.provider })}>Remove</Button>
+      </div>
+      {testResult && (
+        <p className={`t-small mt-1.5 ${testResult.tone === 'success' ? 'text-success' : 'text-danger'}`}>
+          {testResult.text}
+        </p>
+      )}
+    </div>
   );
 }
