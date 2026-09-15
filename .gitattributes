@@ -2,3 +2,13 @@
 *.png binary
 *.jpg binary
 *.ico binary
+
+# Binary assets: never diffed, never line-ending converted.
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Generated, so it stays out of diffs and the language statistics.
+package-lock.json linguist-generated=true
