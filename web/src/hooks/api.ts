@@ -10,7 +10,7 @@ import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '@/services/api';
 import type {
   TestRun, McpTool, AuditEvent, ApiSpec, Grant, RiskClass, HealthStatus, HttpMethod, Finding,
   Deployment, DeployConfig, PreflightCheck,
-  Project, Assessment, SettingsConfig, Connection,
+  Project, Assessment, SettingsConfig, Connection, AiProviderSpec, AiProviderStatus,
 } from '@/types';
 
 /* ── Health ───────────────────────────────────────────────────────────────── */
@@ -334,6 +334,51 @@ export function useRemoveConnection() {
   return useMutation({
     mutationFn: (vars: { provider: string }) => apiDelete(`/connections/${vars.provider}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+  });
+}
+
+// ── BYOK AI providers ────────────────────────────────────────────────────────
+
+export const useProviders = () => useQuery({
+  queryKey: ['providers'],
+  queryFn: () => apiGet<{ specs: AiProviderSpec[]; providers: AiProviderStatus[] }>('/providers'),
+});
+
+/** Store and verify a provider credential. `error` is set when verification failed. */
+export function useSaveProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string; fields: Record<string, string> }) =>
+      apiPut<{ provider: string; connected: boolean; verified: boolean; active: boolean; error: string | null }>(
+        `/providers/${vars.provider}`, { fields: vars.fields }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+  });
+}
+
+export function useActivateProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string }) =>
+      apiPost<{ provider: string; active: boolean }>(`/providers/${vars.provider}/activate`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+  });
+}
+
+/** Turn off BYOK: generation falls back to the platform's own keys. */
+export function useDeactivateProviders() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ active: null }>('/providers/deactivate', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+  });
+}
+
+export function useRemoveProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { provider: string }) =>
+      apiDelete<{ provider: string; connected: boolean }>(`/providers/${vars.provider}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
   });
 }
 

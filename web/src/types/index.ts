@@ -273,6 +273,34 @@ export interface Connection {
   updatedAt?: string;
 }
 
+// ── BYOK AI providers ────────────────────────────────────────────────────────
+
+export interface AiProviderField {
+  key: string;
+  label: string;
+  type: 'secret' | 'text';
+  required: boolean;
+  placeholder: string | null;
+  default: string | null;
+}
+
+export interface AiProviderSpec {
+  provider: string;
+  label: string;
+  fields: AiProviderField[];
+}
+
+export interface AiProviderStatus {
+  provider: string;
+  connected: boolean;
+  config: Record<string, string>;
+  hints: Record<string, string>;
+  verified: boolean;
+  verifiedAt: string | null;
+  active: boolean;
+  updatedAt?: string;
+}
+
 export type AssessState =
   | 'PENDING' | 'DISCOVERING' | 'TESTING' | 'AWAITING_INPUT'
   | 'SCANNING' | 'ANALYZING' | 'REPORTING' | 'COMPLETE' | 'FAILED';

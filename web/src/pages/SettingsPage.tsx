@@ -12,13 +12,14 @@ import { useSearchParams } from 'react-router-dom';
 import {
   useHealth, useGrants, useRevokeGrant, useSettingsConfig,
   useConnections, useSetConnection, useRemoveConnection, useOAuthStart,
+  useProviders, useSaveProvider, useActivateProvider, useDeactivateProviders, useRemoveProvider,
 } from '@/hooks/api';
 import { useAuthStore } from '@/store/auth';
 import {
-  Card, CardHeader, CardBody, Button, Input, Chip, RiskChip, EmptyState, Alert, SkeletonRows,
+  Card, CardHeader, CardBody, Button, Input, Select, Field, Chip, RiskChip, EmptyState, Alert, SkeletonRows,
 } from '@/components/ui';
 import { ApiError } from '@/services/api';
-import type { Connection } from '@/types';
+import type { Connection, AiProviderSpec, AiProviderStatus } from '@/types';
 
 export function SettingsPage() {
   const { user, signOut } = useAuthStore();
@@ -100,6 +101,8 @@ export function SettingsPage() {
           </p>
         </CardBody>
       </Card>
+
+      <AiProviderCard />
 
       <Card>
         <CardHeader title="Self-host configuration" />
@@ -289,5 +292,135 @@ function ConnectionRow({ provider, conn, oauthAvailable }: {
       )}
       {error && <p className="t-small mt-1.5 text-danger">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * BYOK AI providers: pick a provider, fill only its fields, verify + save. The
+ * active provider drives this user's generation; with none active the platform's
+ * own keys are used. A secret only ever travels inbound; the server returns
+ * presence, a last-4 hint and the verified flag, never the key.
+ */
+function AiProviderCard() {
+  const { data, isLoading } = useProviders();
+  const save = useSaveProvider();
+  const activate = useActivateProvider();
+  const deactivate = useDeactivateProviders();
+  const remove = useRemoveProvider();
+
+  const specs: AiProviderSpec[] = data?.specs ?? [];
+  const providers: AiProviderStatus[] = data?.providers ?? [];
+  const activeProvider = providers.find((p) => p.active);
+  const configured = providers.filter((p) => p.connected);
+
+  const [selected, setSelected] = useState<string>('');
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+
+  const label = (p: string) => specs.find((s) => s.provider === p)?.label ?? p;
+
+  function pickProvider(provider: string) {
+    setSelected(provider);
+    setResult(null);
+    const s = specs.find((x) => x.provider === provider);
+    const seed: Record<string, string> = {};
+    for (const f of s?.fields ?? []) if (f.default) seed[f.key] = f.default;
+    setValues(seed);
+  }
+
+  // Default the dropdown to the first provider once the specs arrive.
+  useEffect(() => {
+    if (!selected && specs.length) pickProvider(specs[0].provider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specs.length]);
+
+  const spec = specs.find((s) => s.provider === selected);
+  const canSave = spec?.fields.filter((f) => f.required).every((f) => (values[f.key] ?? '').trim().length > 0) ?? false;
+
+  const submit = async () => {
+    if (!spec) return;
+    setResult(null);
+    try {
+      const r = await save.mutateAsync({ provider: spec.provider, fields: values });
+      setResult(r.verified
+        ? { tone: 'success', text: r.active ? `${label(spec.provider)} verified and set as active.` : `${label(spec.provider)} verified and saved.` }
+        : { tone: 'danger', text: r.error ?? 'That credential could not be verified.' });
+    } catch (err) {
+      setResult({ tone: 'danger', text: err instanceof ApiError ? err.message : 'Could not save the provider.' });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader title="AI provider (bring your own key)" />
+      <CardBody className="space-y-4">
+        <p className="t-small text-ink-muted">
+          Optional. Use your own AI provider for test generation instead of the platform's. The
+          credential is verified with a live call, encrypted on the server, and never sent back to the
+          browser. Set none and the platform's keys are used; an active provider of yours overrides them.
+        </p>
+
+        <div className={`rounded-[6px] border px-3 py-2 text-[13px] ${activeProvider ? 'border-success/40 bg-success-50/50' : 'border-line bg-surface-2'}`}>
+          {activeProvider ? (
+            <span>
+              Generation uses <strong>your {label(activeProvider.provider)} key</strong>
+              {activeProvider.config.model ? ` (${activeProvider.config.model})` : ''}.{' '}
+              <button type="button" className="font-medium text-accent hover:underline"
+                onClick={() => deactivate.mutate()}>Use platform keys instead</button>
+            </span>
+          ) : (
+            <span>Generation uses the <strong>platform&apos;s keys</strong>. Configure and activate a provider below to use your own.</span>
+          )}
+        </div>
+
+        {isLoading && <SkeletonRows rows={2} />}
+
+        {configured.length > 0 && (
+          <div className="space-y-2">
+            {configured.map((p) => (
+              <div key={p.provider} className="flex flex-wrap items-center gap-2 rounded-[8px] border border-line p-3">
+                <span className="w-24 text-[13px] font-medium text-ink">{label(p.provider)}</span>
+                {p.verified
+                  ? <Chip className="bg-success-50 text-success">verified</Chip>
+                  : <Chip className="bg-danger-50 text-danger">unverified</Chip>}
+                {p.active && <Chip className="bg-accent text-white">active</Chip>}
+                {p.config.model && <span className="t-mono text-[12px] text-ink-subtle">{p.config.model}</span>}
+                <div className="flex-1" />
+                {p.verified && !p.active && (
+                  <Button size="sm" variant="secondary" loading={activate.isPending}
+                    onClick={() => activate.mutate({ provider: p.provider })}>Make active</Button>
+                )}
+                <Button size="sm" variant="secondary" loading={remove.isPending}
+                  onClick={() => remove.mutate({ provider: p.provider })}>Remove</Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-3 rounded-[8px] border border-line p-3">
+          <Field label="Provider" htmlFor="ai-provider">
+            <Select id="ai-provider" value={selected} onChange={(e) => pickProvider(e.target.value)}>
+              {specs.map((s) => <option key={s.provider} value={s.provider}>{s.label}</option>)}
+            </Select>
+          </Field>
+
+          {spec?.fields.map((f) => (
+            <Field key={f.key} label={f.required ? f.label : `${f.label} (optional)`} htmlFor={`ai-${f.key}`}>
+              <Input id={`ai-${f.key}`} mono
+                type={f.type === 'secret' ? 'password' : 'text'}
+                autoComplete="off"
+                placeholder={f.placeholder ?? ''}
+                value={values[f.key] ?? ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))} />
+            </Field>
+          ))}
+
+          <Button loading={save.isPending} disabled={!canSave} onClick={() => void submit()}>
+            Verify &amp; save
+          </Button>
+          {result && <p className={`t-small ${result.tone === 'success' ? 'text-success' : 'text-danger'}`}>{result.text}</p>}
+        </div>
+      </CardBody>
+    </Card>
   );
 }
