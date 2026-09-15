@@ -22,6 +22,7 @@ import { Discovery } from '../models/Discovery.js';
 import { Project } from '../models/Project.js';
 import { assessmentQueue } from '../lib/jobQueue.js';
 import { buildReport, computeReadiness, renderReportMarkdown } from './report.service.js';
+import { resolveUserLlm } from './llm.js';
 import { logger } from '../lib/logger.js';
 
 export class AssessmentError extends Error {
@@ -77,7 +78,7 @@ function compactFailures(functional = []) {
 export function defaultDeps() {
   return {
     discover: ({ runTool, context }) => runDiscoveryAgent({ runTool, context }),
-    inferIntent: ({ endpoint, source }) => inferEndpointIntent({ endpoint, source }).catch(() => null),
+    inferIntent: ({ endpoint, source, llm }) => inferEndpointIntent({ endpoint, source, llm }).catch(() => null),
     testEndpoint: (args) => runTestingAgentForEndpoint(args),
     securityAssess: (args) => runSecurityAssessment(args),
     ensureApp: defaultEnsureApp,
@@ -222,6 +223,12 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
   if (app.note) assessment.security.notes.push(app.note);
   await assessment.save();
 
+  // Resolve the LLM once for this user: their own AI provider when they have an
+  // active, verified one (BYOK), otherwise the platform's keys. Injected into
+  // every intent and generation call below, so the deep agents never learn
+  // whose key it is.
+  const userLlm = await resolveUserLlm({ userId: assessment.userId });
+
   const endpoints = (model.endpoints ?? []).slice(0, MAX_ENDPOINTS);
   // Test read-only endpoints before mutating ones, and reset the app to its seed
   // state before any endpoint that a prior mutation dirtied. That stops a DELETE
@@ -252,7 +259,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
     try {
       const src = endpoint.file ? await ctx.runTool('fs_read', { path: endpoint.file }, ctx.context) : null;
       sourceContent = src?.content ?? '';
-      intent = await deps.inferIntent({ endpoint, source: sourceContent });
+      intent = await deps.inferIntent({ endpoint, source: sourceContent, llm: userLlm });
     } catch { /* intent is best-effort */ }
 
     if (intent && needsClarification(intent) && intent.clarification) {
@@ -277,7 +284,7 @@ async function phaseTest(assessment, model, ctx, deps, { pauseOnClarification, r
       const result = await deps.testEndpoint({
         endpoint, baseUrl: app.baseUrl, intent: intent?.intent ?? null,
         source: sourceContent,
-        runTool: ctx.runTool, context: ctx.context,
+        runTool: ctx.runTool, context: ctx.context, llm: userLlm,
       });
       const failures = compactFailures(result.functional);
       assessment.endpoints.push({

@@ -28,6 +28,8 @@ import axios from 'axios';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { parseLooseJson } from './jsonRepair.js';
+import { callAiProvider } from './ai-providers.js';
+import { getActiveProviderConfig } from './providers.service.js';
 
 export class LlmError extends Error {
   constructor(code, message, details = {}) {
@@ -346,8 +348,16 @@ export async function generateJSON({
   providers = providerOrder(),
   task = TASK.GENERATION,
   signal,
+  // A pre-resolved chain of { name, call, model } entries, used for BYOK: a
+  // user's own provider first, the platform's env chain behind it as fallback.
+  // When null, the chain is built from `providers` and the env config, which is
+  // the platform-key path.
+  providerChain = null,
 } = {}) {
-  if (!providers.length) {
+  const chain = providerChain ?? providers.map((name) => ({
+    name, call: PROVIDERS[name], model: modelFor(task, name),
+  }));
+  if (!chain.length) {
     throw new LlmError(
       LLM_ERROR.NO_PROVIDER,
       'No LLM provider is configured. Set GROQ_API_KEY or BEDROCK_MODEL_ID.',
@@ -357,8 +367,7 @@ export async function generateJSON({
   const started = Date.now();
   const failures = [];
 
-  for (const name of providers) {
-    const call = PROVIDERS[name];
+  for (const { name, call, model } of chain) {
     let lastText = null;
     let lastIssue = null;
     let rateLimitWaits = 0;
@@ -376,8 +385,7 @@ export async function generateJSON({
       let raw;
       try {
         raw = await call({
-          system, prompt: effectivePrompt, maxTokens, temperature, signal,
-          model: modelFor(task, name),
+          system, prompt: effectivePrompt, maxTokens, temperature, signal, model,
         });
       } catch (err) {
         // A rate limit is a "come back shortly", not a failure of this
@@ -434,9 +442,45 @@ export async function generateJSON({
   // Fail loudly. Never fabricate.
   throw new LlmError(
     LLM_ERROR.INVALID_JSON,
-    `Generation failed after trying ${providers.join(' then ')}. ${failures.join(' | ')}`,
-    { failures, providers },
+    `Generation failed after trying ${chain.map((e) => e.name).join(' then ')}. ${failures.join(' | ')}`,
+    { failures, providers: chain.map((e) => e.name) },
   );
 }
 
-export default { generateJSON, availableProviders, providerOrder, estimateCostUsd };
+/**
+ * Resolve the LLM function for a specific user (BYOK).
+ *
+ * If the user has an active, verified AI provider of their own, generation runs
+ * on it, with the platform's env chain kept behind it as a fallback so a
+ * transient failure of the user's key still completes. If they have none, this
+ * returns the plain platform-key generateJSON. Resolve it ONCE at a pipeline
+ * entry and inject the returned function wherever an agent takes `llm`; the deep
+ * agent code never learns whose key it is.
+ */
+export async function resolveUserLlm({ userId, task = TASK.GENERATION } = {}) {
+  const active = userId ? await getActiveProviderConfig({ userId }).catch(() => null) : null;
+  if (!active) return generateJSON;
+
+  const userEntry = {
+    name: active.provider,
+    model: active.model ?? active.config?.model ?? null,
+    call: (opts) => callAiProvider({
+      provider: active.provider,
+      credentials: active.credentials,
+      config: { ...active.config, model: opts.model ?? active.config?.model },
+      system: opts.system,
+      prompt: opts.prompt,
+      maxTokens: opts.maxTokens,
+      temperature: opts.temperature,
+      signal: opts.signal,
+    }),
+  };
+  const envEntries = providerOrder().map((name) => ({ name, call: PROVIDERS[name], model: modelFor(task, name) }));
+  const providerChain = [userEntry, ...envEntries];
+
+  return (opts) => generateJSON({ ...opts, providerChain });
+}
+
+export default {
+  generateJSON, availableProviders, providerOrder, estimateCostUsd, resolveUserLlm,
+};
