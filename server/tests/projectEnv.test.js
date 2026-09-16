@@ -13,7 +13,7 @@ import { registerAllTools } from '../src/mcp/tools/index.js';
 import { createApp } from '../src/app.js';
 import { User } from '../src/models/User.js';
 import { Project } from '../src/models/Project.js';
-import { createProject, importEnvFromFile } from '../src/services/discovery.service.js';
+import { createProject, importEnvFromFile, decryptRuntimeEnv } from '../src/services/discovery.service.js';
 
 const app = createApp({ logging: false });
 let userId;
@@ -41,10 +41,17 @@ describe('importEnvFromFile', () => {
     expect(result.runtimeEnvKeys.sort()).toEqual(['JWT_SECRET', 'MONGO_URI']);
     expect(result.imported).toBe(2);
 
-    // Values are stored server-side (quotes stripped) but only reachable with the select.
-    const stored = await Project.findById(project._id).select('+runtimeEnv');
-    expect(stored.runtimeEnv.get('JWT_SECRET')).toBe('s3cr3t-value');
-    expect(stored.runtimeEnv.get('MONGO_URI')).toBe('mongodb://localhost:27017/app');
+    // Values are ENCRYPTED at rest: the raw column is ciphertext, never the secret.
+    const stored = await Project.findById(project._id).select('+runtimeEnvEnc');
+    expect(stored.runtimeEnvEnc).toMatch(/^v1:/); // AES-256-GCM envelope
+    expect(stored.runtimeEnvEnc).not.toContain('s3cr3t-value');
+    expect(stored.runtimeEnvEnc).not.toContain('mongodb://');
+    // Only names are stored in the clear, for the UI chip.
+    expect(stored.runtimeEnvKeys.sort()).toEqual(['JWT_SECRET', 'MONGO_URI']);
+    // Decrypting round-trips to the original values (quotes stripped).
+    const decrypted = decryptRuntimeEnv(stored);
+    expect(decrypted.JWT_SECRET).toBe('s3cr3t-value');
+    expect(decrypted.MONGO_URI).toBe('mongodb://localhost:27017/app');
   });
 
   it('errors clearly when there is no .env file', async () => {

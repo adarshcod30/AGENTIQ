@@ -86,6 +86,21 @@ export function createApp({ logging = env.NODE_ENV !== 'test' } = {}) {
     },
   });
 
+  // Expensive writes: a folder upload consumes disk, an assessment burns LLM
+  // budget. Cap them per client so one signed-in user cannot spam either. GETs
+  // (the frontend polls assessment status) and the test suite are exempt.
+  const writeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 40,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (req) => req.method === 'GET' || env.NODE_ENV === 'test',
+    message: {
+      success: false,
+      error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again in a few minutes.' },
+    },
+  });
+
   app.use('/api', healthRoutes);
   app.use('/api/auth', authLimiter, authRoutes);
   app.use('/api/mcp', mcpRoutes);
@@ -95,8 +110,8 @@ export function createApp({ logging = env.NODE_ENV !== 'test' } = {}) {
   app.use('/api/runs', runsRoutes);
   app.use('/api/specs', specsRoutes);
   app.use('/api/deployments', deploymentsRoutes);
-  app.use('/api/projects', projectsRoutes);
-  app.use('/api/assessments', assessmentsRoutes);
+  app.use('/api/projects', writeLimiter, projectsRoutes);
+  app.use('/api/assessments', writeLimiter, assessmentsRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/connections', connectionsRoutes);
   app.use('/api/providers', providersRoutes);

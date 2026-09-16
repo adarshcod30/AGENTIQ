@@ -17,6 +17,7 @@ import { mkdir, writeFile, readdir, stat, rm } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { createJail, FsJailError } from '../mcp/fsJail.js';
 import { env } from '../config/env.js';
+import { encryptSecret, decryptSecret } from './crypto.service.js';
 import { validateUrl, EgressError } from '../mcp/egress.js';
 import { cloneRepo, normalizeGithubUrl, GitError } from './git.service.js';
 import { getConnectionToken } from './connections.service.js';
@@ -36,6 +37,26 @@ export class DiscoveryError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/**
+ * Turns a runtime-env map into the Project fields to store: the AES-GCM
+ * encrypted blob (a secret) and the key names (not a secret). An empty or absent
+ * map clears both. This is the single place runtime env is encrypted for storage.
+ */
+export function runtimeEnvFields(map) {
+  const has = map && Object.keys(map).length > 0;
+  return {
+    runtimeEnvEnc: has ? encryptSecret(JSON.stringify(map)) : undefined,
+    runtimeEnvKeys: has ? Object.keys(map) : undefined,
+  };
+}
+
+/** Decrypts a project's stored runtime env back to a plain object, or null. The
+ *  caller must have selected `+runtimeEnvEnc`, which is off by default. */
+export function decryptRuntimeEnv(project) {
+  if (!project?.runtimeEnvEnc) return null;
+  return JSON.parse(decryptSecret(project.runtimeEnvEnc));
 }
 
 /**
@@ -92,7 +113,6 @@ export async function createProject({
   if (!root && !url && !normalizedRepo) {
     throw new DiscoveryError('Provide a project folder, a deployed URL, or a GitHub repo', 'NO_TARGET', 400);
   }
-  const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
   const cloning = Boolean(normalizedRepo && !root); // a repo with no local folder yet
   const project = await Project.create({
     userId, name,
@@ -101,7 +121,7 @@ export async function createProject({
     ...(url ? { targetUrl: url } : {}),
     ...(normalizedRepo ? { repoUrl: normalizedRepo } : {}),
     ...(cloning ? { cloneStatus: 'cloning' } : {}),
-    ...(hasEnv ? { runtimeEnv } : {}),
+    ...runtimeEnvFields(runtimeEnv), // encrypted at rest; empty map sets nothing
     ...(startScript && startScript.trim() ? { startScript: startScript.trim() } : {}),
   });
   if (cloning && scheduleClone) {
@@ -240,11 +260,12 @@ export async function runCloneJob({ projectId, repoUrl, userId = null, clone = c
  * NAMES only, never the values, so the secrets never travel back out.
  */
 export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScript, targetUrl }) {
-  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
+  const project = await Project.findOne({ _id: projectId, userId });
   if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
   if (runtimeEnv !== undefined) {
-    const hasEnv = runtimeEnv && Object.keys(runtimeEnv).length > 0;
-    project.runtimeEnv = hasEnv ? runtimeEnv : undefined;
+    const { runtimeEnvEnc, runtimeEnvKeys } = runtimeEnvFields(runtimeEnv);
+    project.runtimeEnvEnc = runtimeEnvEnc; // undefined clears it
+    project.runtimeEnvKeys = runtimeEnvKeys;
   }
   if (startScript !== undefined) {
     const trimmed = typeof startScript === 'string' ? startScript.trim() : '';
@@ -265,9 +286,8 @@ export async function updateProjectEnv({ userId, projectId, runtimeEnv, startScr
     }
   }
   await project.save();
-  const keys = project.runtimeEnv ? [...project.runtimeEnv.keys()] : [];
   return {
-    id: project._id, runtimeEnvKeys: keys,
+    id: project._id, runtimeEnvKeys: project.runtimeEnvKeys ?? [],
     startScript: project.startScript ?? null, targetUrl: project.targetUrl ?? null,
   };
 }
@@ -300,7 +320,7 @@ const ENV_FILE_RE = /^\.env(\.[\w.-]+)?$/;
  */
 export async function importEnvFromFile({ userId, projectId, file = '.env' }) {
   if (!ENV_FILE_RE.test(file)) throw new DiscoveryError('Only a .env file can be imported', 'BAD_ENV_FILE', 400);
-  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
+  const project = await Project.findOne({ _id: projectId, userId });
   if (!project) throw new DiscoveryError('Project not found', 'NOT_FOUND', 404);
   if (!project.workspaceRoot) {
     throw new DiscoveryError('This project has no local folder to read a .env from', 'NO_SOURCE', 400);
@@ -315,7 +335,7 @@ export async function importEnvFromFile({ userId, projectId, file = '.env' }) {
   if (text === null) throw new DiscoveryError(`No ${file} file found in the project folder`, 'ENV_FILE_NOT_FOUND', 404);
   const parsed = parseDotenv(text);
   if (Object.keys(parsed).length === 0) throw new DiscoveryError(`${file} has no KEY=VALUE lines`, 'ENV_FILE_EMPTY', 400);
-  project.runtimeEnv = parsed;
+  Object.assign(project, runtimeEnvFields(parsed)); // encrypt before it touches the DB
   await project.save();
   return { id: project._id, runtimeEnvKeys: Object.keys(parsed), imported: Object.keys(parsed).length, file };
 }
@@ -375,21 +395,18 @@ export async function discoverProject({ userId, projectId, sessionId = 'discover
 
 /** A user's projects, newest first. Scoped by userId, never by id alone. */
 export async function listProjects({ userId }) {
-  const projects = await Project.find({ userId }).sort({ createdAt: -1 }).select('+runtimeEnv').lean();
-  // Expose only the KEY names of the runtime env, never the values.
-  return projects.map(({ runtimeEnv, ...p }) => ({
-    ...p,
-    runtimeEnvKeys: runtimeEnv ? Object.keys(runtimeEnv) : [],
-  }));
+  // The encrypted env blob is select:false, so it is never even loaded here; the
+  // stored key NAMES (not a secret) are all the list needs.
+  const projects = await Project.find({ userId }).sort({ createdAt: -1 }).lean();
+  return projects.map((p) => ({ ...p, runtimeEnvKeys: p.runtimeEnvKeys ?? [] }));
 }
 
 /** One project with its latest discovery, scoped to the owner. */
 export async function getProject({ userId, projectId }) {
-  const project = await Project.findOne({ _id: projectId, userId }).select('+runtimeEnv');
+  const project = await Project.findOne({ _id: projectId, userId });
   if (!project) return null;
   const latest = await Discovery.findOne({ projectId, userId }).sort({ createdAt: -1 }).lean();
-  const runtimeEnvKeys = project.runtimeEnv ? [...project.runtimeEnv.keys()] : [];
-  return { project: { ...project.toJSON(), runtimeEnvKeys }, discovery: latest };
+  return { project: { ...project.toJSON(), runtimeEnvKeys: project.runtimeEnvKeys ?? [] }, discovery: latest };
 }
 
 export default {

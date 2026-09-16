@@ -65,8 +65,11 @@ const { grantStore } = await import('./mcp/permissions.js');
 const { attachGrantPersistence } = await import('./mcp/grantPersistence.js');
 await attachGrantPersistence(grantStore);
 
-const server = app.listen(env.PORT, () => {
-  logger.info(`AGENTIQ server listening on http://localhost:${env.PORT}`);
+// Bind the configured interface (HOST). Unset means all interfaces; behind a
+// reverse proxy, HOST=127.0.0.1 keeps the app off the public interface entirely.
+const listenArgs = env.HOST ? [env.PORT, env.HOST] : [env.PORT];
+const server = app.listen(...listenArgs, () => {
+  logger.info(`AGENTIQ server listening on http://${env.HOST ?? 'localhost'}:${env.PORT}`);
   logger.info(`Health check: http://localhost:${env.PORT}/api/health`);
 });
 

@@ -37,12 +37,23 @@ const projectSchema = new mongoose.Schema({
 
   /**
    * Opt-in runtime environment for starting the app under test (a database URL,
-   * a secret). Local mode only: it is the user's own app on their own machine.
-   * `select: false` keeps it out of every query by default, including the .lean()
-   * reads the API returns, so it is never sent to the browser. The assessment
-   * worker asks for it explicitly. The names of the keys are all the UI ever sees.
+   * a secret). It can hold real credentials, so it is ENCRYPTED at rest exactly
+   * like a provider key or a deploy token: the whole KEY=VALUE map is AES-256-GCM
+   * encrypted into this one blob (services/crypto.service.js). `select: false`
+   * keeps it out of every query by default, so it is never loaded, never
+   * serialised, and never sent to the browser; the assessment worker asks for it
+   * explicitly and decrypts it only in memory to start the app. A database dump
+   * therefore never exposes anyone's runtime secrets in the clear.
    */
-  runtimeEnv: { type: Map, of: String, default: undefined, select: false },
+  runtimeEnvEnc: { type: String, default: undefined, select: false },
+
+  /**
+   * The env variable NAMES only (e.g. ['MONGO_URI', 'JWT_SECRET']). Not a secret,
+   * so unlike the encrypted blob it is selected by default and shown in the UI as
+   * an "env: MONGO_URI, JWT_SECRET" chip, letting the list render without ever
+   * touching the ciphertext.
+   */
+  runtimeEnvKeys: { type: [String], default: undefined },
 
   /**
    * Optional npm script that starts the app under test, e.g. "dev:backend".
@@ -84,11 +95,12 @@ projectSchema.pre('validate', function requireTarget() {
   }
 });
 
-/** Never leak internals the client does not need. */
+/** Never leak internals the client does not need. The encrypted runtime env is
+ *  select:false and absent here by construction; only its key names are exposed. */
 projectSchema.methods.toJSON = function toJSON() {
   const {
     _id, name, workspaceRoot, targetUrl, repoUrl, trusted, cloneStatus, cloneError,
-    startScript, lastDiscoveryAt, createdAt, updatedAt,
+    startScript, runtimeEnvKeys, lastDiscoveryAt, createdAt, updatedAt,
   } = this;
   return {
     id: _id,
@@ -100,6 +112,7 @@ projectSchema.methods.toJSON = function toJSON() {
     cloneStatus: cloneStatus ?? 'ready',
     cloneError: cloneError ?? null,
     startScript: startScript ?? null,
+    runtimeEnvKeys: runtimeEnvKeys ?? [],
     lastDiscoveryAt,
     createdAt,
     updatedAt,

@@ -20,6 +20,7 @@ import { runSecurityAssessment } from '../agents/security.agent.js';
 import { Assessment, ASSESS_STATE, canTransition } from '../models/Assessment.js';
 import { Discovery } from '../models/Discovery.js';
 import { Project } from '../models/Project.js';
+import { decryptRuntimeEnv } from './discovery.service.js';
 import { assessmentQueue } from '../lib/jobQueue.js';
 import { buildReport, computeReadiness, renderReportMarkdown } from './report.service.js';
 import { resolveUserLlm } from './llm.js';
@@ -356,11 +357,12 @@ async function finishFailed(assessment, err) {
 export async function runAssessment({ assessmentId, deps = defaultDeps(), pauseOnClarification = false } = {}) {
   const assessment = await Assessment.findById(assessmentId);
   if (!assessment) return null;
-  // Ask for runtimeEnv explicitly (it is select:false). This is the only place it
-  // is read, and it goes straight to the app-start, never into a response.
-  const project = await Project.findById(assessment.projectId).select('+runtimeEnv');
+  // Ask for the encrypted runtime env explicitly (it is select:false). This is the
+  // only place it is read: it is decrypted in memory, handed to the app-start, and
+  // never put into a response.
+  const project = await Project.findById(assessment.projectId).select('+runtimeEnvEnc');
   if (!project) return finishFailed(assessment, new AssessmentError('Project gone', 'PROJECT_GONE', 409));
-  const runtimeEnv = project.runtimeEnv ? Object.fromEntries(project.runtimeEnv) : null;
+  const runtimeEnv = decryptRuntimeEnv(project);
   const startScript = project.startScript ?? null;
   const targetUrl = project.targetUrl ?? null;
   const hasSource = Boolean(project.workspaceRoot);

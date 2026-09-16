@@ -129,6 +129,11 @@ export const envSchema = z
     // self-hosted run keeps the folder workflow.
     HOSTED: boolFromString,
 
+    // The interface the HTTP server binds. Unset binds all interfaces (fine for
+    // local dev). Behind a reverse proxy set HOST=127.0.0.1 so the app is only
+    // reachable through the proxy, never directly, even if the firewall slips.
+    HOST: z.string().optional(),
+
     // ── Egress guard ─────────────────────────────────────────────────────────
     EGRESS_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
     EGRESS_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
@@ -280,7 +285,7 @@ export const ENV_KEYS = [
   'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
   'MAIL_DRIVER', 'RESEND_API_KEY', 'SMTP_URL', 'MAIL_FROM',
   'GMAIL_USER', 'GMAIL_APP_PASSWORD', 'SMTP_HOST', 'SMTP_PORT',
-  'RENDER_API_KEY', 'RENDER_API_BASE', 'LOG_LEVEL', 'HOSTED',
+  'RENDER_API_KEY', 'RENDER_API_BASE', 'LOG_LEVEL', 'HOSTED', 'HOST',
   'EGRESS_TIMEOUT_MS', 'EGRESS_MAX_BYTES',
   'EGRESS_RPS_PER_HOST', 'ALLOW_PRIVATE_TARGETS',
 ];
