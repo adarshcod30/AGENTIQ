@@ -13,7 +13,9 @@
 [![MCP](https://img.shields.io/badge/built%20on-MCP-1B4D89)](https://modelcontextprotocol.io)
 [![Last commit](https://img.shields.io/github/last-commit/adarshcod30/AGENTIQ)](https://github.com/adarshcod30/AGENTIQ/commits/main)
 
-[**Quick start**](#quick-start) · [**How it works**](#how-it-works) · [**Evaluation**](#evaluation) · [**Docs**](docs/) · [**Report a bug**](https://github.com/adarshcod30/AGENTIQ/issues)
+[**Live app →**](https://agentiq-adarshcod30s-projects.vercel.app) · [**Use the site**](#using-the-live-site) · [**CLI**](#command-line-interface) · [**Run it yourself**](#run-it-yourself) · [**How it works**](#how-it-works) · [**Docs**](docs/)
+
+**Live:** app at **[agentiq-adarshcod30s-projects.vercel.app](https://agentiq-adarshcod30s-projects.vercel.app)** · API at **[agentiq.duckdns.org](https://agentiq.duckdns.org/api/health)**
 
 </div>
 
@@ -37,7 +39,9 @@ was allowed to.
 
 - [The problem](#the-problem)
 - [Key features](#key-features)
-- [Quick start](#quick-start)
+- [Using the live site](#using-the-live-site)
+- [Command-line interface](#command-line-interface)
+- [Run it yourself](#run-it-yourself)
 - [How it works](#how-it-works)
 - [The security model](#the-security-model)
 - [Evaluation](#evaluation)
@@ -76,38 +80,123 @@ The third problem is the one AGENTIQ is built around.
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
 | **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
 | **Deployment Agent** | Read-only preflight against GitHub, then a deploy to **Render or Vercel using the user's own connected account**, then an automatic test and scan of the live URL, all recorded together. |
-| **Autonomous assessment** | Register a project as a local folder, a public or private GitHub repo (shallow-cloned in the background, statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
-| **Bring your own accounts** | Multi-tenant. Each user connects their own GitHub, Render and Vercel from the UI, by OAuth or a pasted token, encrypted at rest and never returned. Private repos clone with the user's token, and deploys go to the user's own account, no shared platform key. |
+| **Autonomous assessment** | Register a project as a local folder, an **uploaded folder** (from the browser or the [`agentiq` CLI](#command-line-interface)), a public or private GitHub repo (shallow-cloned in the background, statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
+| **Bring your own accounts and keys** | Multi-tenant. Each user connects their own GitHub, Render and Vercel (by OAuth or a pasted token), and optionally their own **AI provider** for generation (OpenAI, Anthropic, Gemini, Grok, Groq or Bedrock). Every secret is encrypted at rest under a dedicated key and never returned. Private repos clone with the user's token, and deploys go to the user's own account, no shared platform key. |
 | **Live testing** | When an app needs environment variables to boot, provide them by hand or **load them from the project's own `.env`** (stored server-side, never returned) and re-run, so its endpoints are tested against the running app. A deployed URL or a cloned repo is never sent test writes. |
 | **Trust pages** | A Tool Registry that renders live JSON Schemas from the server, and an Audit Log where denied and SSRF-blocked calls stand out. |
 | **Real dashboard** | Every figure is a MongoDB aggregation over your own runs. A new account shows honest zeros. |
 | **Evaluation harness** | `npm run evaluate` measures precision and recall on labelled fixture apps, a mutation score for generated suites, and a grounding ablation. |
 
-## Quick start
+## Using the live site
 
-Runs locally in about five minutes with a free Groq key and no AWS account. You need
-**Node 22.12+** and **Docker** (for MongoDB).
+The fastest way to try AGENTIQ is the hosted app. Nothing to install.
+
+> **[agentiq-adarshcod30s-projects.vercel.app](https://agentiq-adarshcod30s-projects.vercel.app)**
+
+1. **Sign up.** Create an account with an email and password, or use **Continue with Google** (open
+   to any Google account in the lnmiit.ac.in organisation). You can start using it right away; email
+   verification is a reminder, not a gate.
+2. **Add a project** on the **Projects** page, in any one of three ways:
+   - **Upload a folder from your computer.** Click *Choose folder* and pick your project. Its source
+     is uploaded (minus `node_modules`, build output and binaries) and scanned. The code is never run.
+   - **Deployed URL.** Paste a live `https://` URL. AGENTIQ probes it directly and skips functional
+     tests, so it never sends the live app test writes.
+   - **GitHub repository.** Paste a public repo URL. It is cloned server-side, statically scanned, and
+     never executed.
+3. **Run the assessment.** Click *Run assessment* and watch the live phase timeline: discover routes,
+   test endpoints, security scan, judge readiness, assemble the report.
+4. **Read the report:** the discovered API surface, each security finding with why it matters and how
+   to fix it, and a ready-to-deploy verdict.
+5. **Or test a single endpoint:** on the dashboard choose *New run*, paste a URL and a sentence
+   describing what it should do. AGENTIQ generates and executes test cases and shows expected vs actual
+   for every assertion.
+6. **Bring your own keys (optional).** In **Settings**, connect your own AI provider (for generation)
+   and your GitHub/Render/Vercel (for private clones and deploys). All encrypted at rest, see
+   [Bring your own accounts](#bring-your-own-accounts).
+
+> On the hosted site, uploaded and cloned code is **scanned but never run**, so the "start the app and
+> hit its live endpoints" step is skipped (executing a stranger's code on shared infrastructure is not
+> safe). To get live functional testing too, use the [CLI](#command-line-interface) or
+> [run AGENTIQ yourself](#run-it-yourself), where the code and its environment live on your machine.
+
+## Command-line interface
+
+Scan a folder on your own machine from the terminal. The CLI ([`cli/`](cli/README.md)) is
+dependency-free (Node 18.17+) and talks to the same hosted API, so a scan you start here also shows up
+in your dashboard.
+
+```bash
+git clone https://github.com/adarshcod30/AGENTIQ.git
+cd AGENTIQ
+
+# 1. Sign in (saves a token to ~/.agentiq/config.json)
+node cli/bin/agentiq.js login
+
+# 2. Scan a folder and wait for the report
+node cli/bin/agentiq.js scan ./path/to/your-project
+```
+
+Prefer a short command? Install it once with `npm install -g ./cli`, then just
+`agentiq scan ./your-project`.
+
+| Command | What it does |
+|---|---|
+| `agentiq login` | Sign in with email + password. `--token <t>` saves a token instead; `--api <url>` targets a different backend. |
+| `agentiq scan [dir]` | Upload and scan a folder (default: the current one). `--name` sets the project name; `--no-wait` starts the scan and prints the dashboard link instead of waiting. |
+| `agentiq whoami` | Show the signed-in account. |
+| `agentiq logout` | Forget the saved token. |
+
+Overrides via environment: `AGENTIQ_API` (backend base URL), `AGENTIQ_WEB` (dashboard base for the
+printed links), `AGENTIQ_PASSWORD` (non-interactive login for CI). Full reference:
+[cli/README.md](cli/README.md).
+
+## Run it yourself
+
+Clone the repo, add your keys, and you have the whole platform locally, including the parts the hosted
+site cannot do (starting an app to test its live endpoints). It runs in about five minutes with a free
+Groq key and no AWS account. You need **Node 22.12+** and a **MongoDB** (a free Atlas cluster, a local
+`mongod`, or Docker).
+
+**1. Clone and install:**
 
 ```bash
 git clone https://github.com/adarshcod30/AGENTIQ.git
 cd AGENTIQ
 npm ci
+```
+
+**2. Get a MongoDB** (pick one):
+
+```bash
+# A) MongoDB Atlas, free, nothing to install: create an M0 cluster at
+#    https://www.mongodb.com/atlas and copy its connection string.
+# B) a local mongod you already run, at mongodb://127.0.0.1:27017
+# C) Docker:
 docker run -d --name agentiq-mongo -p 27017:27017 mongo:7
+```
+
+**3. Add your keys.** Copy the template ([get a free Groq key](https://console.groq.com)):
+
+```bash
 cp .env.example server/.env
 ```
 
-Edit `server/.env` and set these six values ([get a Groq key](https://console.groq.com), free):
+Set these in `server/.env` (the ones that matter to start):
 
 ```bash
-MONGO_URI=mongodb://127.0.0.1:27017/agentiq
-JWT_SECRET=<run: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))">
-GROQ_API_KEY=<your key>
+MONGO_URI=mongodb://127.0.0.1:27017/agentiq        # or your Atlas connection string
+JWT_SECRET=<node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))">
+ENCRYPTION_KEY=<run that command again for a second, independent value>
+GROQ_API_KEY=<your Groq key>
 LLM_PRIMARY=groq
 LLM_FALLBACK=bedrock
-ALLOW_PRIVATE_TARGETS=true
+ALLOW_PRIVATE_TARGETS=true                          # local fixtures only; refused in production
 ```
 
-Then start everything, and in a second terminal the two fixture APIs to test against:
+Everything else is optional (AWS Bedrock, Google sign-in, email, GitHub/Render/Vercel). The server
+prints a table at boot of what is set and what is missing, so you can add more later.
+
+**4. Start it,** and in a second terminal the two fixture APIs to test against:
 
 ```bash
 npm run dev
@@ -117,9 +206,11 @@ npm run dev
 npm run fixtures
 ```
 
-Open **http://localhost:5173**, register, and point a run at `http://127.0.0.1:4001/users/1`
-(the deliberately vulnerable fixture) or at `http://127.0.0.1:4002/users/1` (the hardened one).
-More detail in [docs/08_COLLABORATOR_SETUP.md](docs/08_COLLABORATOR_SETUP.md).
+**5. Use it.** Open **http://localhost:5173**, register, then either add a **local folder** project
+(the full workflow: the app is started in the sandbox and its endpoints are tested live), or point a
+single run at `http://127.0.0.1:4001/users/1` (the deliberately vulnerable fixture) or
+`http://127.0.0.1:4002/users/1` (the hardened one). More detail in
+[docs/08_COLLABORATOR_SETUP.md](docs/08_COLLABORATOR_SETUP.md).
 
 > `ALLOW_PRIVATE_TARGETS=true` lets the server reach the fixtures on localhost. The server
 > **refuses to boot** with it in production, and the cloud-metadata range stays blocked even when
@@ -270,11 +361,13 @@ delete path in the API, and the schema refuses updates too.
 **4. The filesystem jail, untrusted code, and credentials at rest.** Reading a project's files is
 bounded by a jail (`server/src/mcp/fsJail.js`), the exact analogue of the egress guard: the resolved
 real path, symlinks followed, must sit inside the workspace, so a tool asked for
-`../../.aws/credentials` is refused. A GitHub repo is cloned as **untrusted** code (`trusted: false`)
-and statically scanned, but its app is never started, so none of its scripts run. And every
-third-party token a user connects is encrypted at rest with **AES-256-GCM** (a random IV and auth
-tag, key derived from `JWT_SECRET`), stored `select:false`, decrypted only server-side for a deploy
-or a private clone, and never returned to the browser.
+`../../.aws/credentials` is refused. A GitHub repo, or a folder uploaded from the browser, is stored
+as **untrusted** code (`trusted: false`) and statically scanned, but its app is never started, so none
+of its scripts run. And every secret a user hands over, third-party tokens (GitHub/Render/Vercel), BYOK
+AI provider keys, and any runtime env they paste, is encrypted at rest with **AES-256-GCM** (a random
+IV and auth tag, key derived from a **dedicated `ENCRYPTION_KEY`** that is independent of `JWT_SECRET`),
+stored `select:false`, decrypted only server-side when needed, and never returned to the browser. The
+app itself connects to the database as a least-privilege `readWrite` user, not an admin.
 
 The rule that agents contain no I/O is not left to discipline. `server/tests/architecture.test.js`
 fails the build if an HTTP client or process API appears in the agents, routes or controllers.
@@ -335,34 +428,47 @@ learn.
 | Frontend | React 19, Vite 8, TypeScript, Tailwind CSS 4, TanStack Query, React Router 7, Recharts 3 |
 | Backend | Node.js 22, Express 5, Mongoose 9, Zod 4, Passport (Google OAuth 2.0), Pino |
 | Agent tooling | Model Context Protocol SDK (streamable HTTP and stdio), Swagger Parser |
-| LLM | Amazon Bedrock (Nova, Converse API) with Groq as fallback |
+| LLM | Amazon Bedrock (Converse API), DeepSeek V3.2 as the default generation model, Groq as fallback; per-user BYOK for OpenAI, Anthropic, Gemini, Grok and Groq |
+| CLI | Dependency-free Node CLI (`agentiq`) that reuses the hosted API |
 | Database | MongoDB Atlas |
 | Email | Nodemailer over Gmail SMTP, or Resend |
 | Testing | Vitest, Supertest, mongodb-memory-server, v8 coverage |
 | CI | GitHub Actions |
-| Infrastructure | Docker; AWS App Runner, S3 + CloudFront and ECR as the deployment target |
+| Infrastructure (live) | Vercel (frontend) · Oracle Cloud Always Free VM with pm2 + Caddy (backend) · DuckDNS · MongoDB Atlas · optional Dockerfile |
 
 Exact versions and the reasoning behind each choice: [docs/02_TRD.md](docs/02_TRD.md) §2.
 
 ## Deployment and infrastructure
 
-- **Status:** there is no public deployment yet. The API is packaged as a container (`Dockerfile`:
-  non-root user, production dependencies only, exec-form start so it shuts down cleanly on
-  `SIGTERM`). Run it locally with the [quick start](#quick-start).
+AGENTIQ runs live on an all-free stack, always on, with auto-renewing HTTPS.
+
+| Piece | Where | Notes |
+|---|---|---|
+| **Frontend** | Vercel (free) | Static React build, auto-deploys on push to `main`. Live at [agentiq-adarshcod30s-projects.vercel.app](https://agentiq-adarshcod30s-projects.vercel.app). |
+| **Backend API** | Oracle Cloud Always Free VM | Node under **pm2**, fronted by **Caddy** (automatic Let's Encrypt, TLS 1.3). Always on, no cold starts. Live at [agentiq.duckdns.org](https://agentiq.duckdns.org/api/health). |
+| **Permanent hostname** | DuckDNS | `agentiq.duckdns.org`, kept pointed at the VM's current IP by a 5-minute cron, so an IP change self-heals. |
+| **Database** | MongoDB Atlas M0 (free) | The app connects as a least-privilege `readWrite` user scoped to a single database. |
+
+Production hardening:
+
+- **Secrets encrypted at rest** with AES-256-GCM under a **dedicated `ENCRYPTION_KEY`**, independent of
+  `JWT_SECRET`: AI provider keys, GitHub/Render/Vercel tokens, and any runtime env a user pastes.
+- **helmet** (CSP, HSTS, `nosniff`, frame-options), **TLS 1.3**, CORS pinned to the frontend origin,
+  and rate limits on auth and the expensive write routes.
+- The API binds `127.0.0.1` behind Caddy (never the public interface); the host firewall allows only
+  22/80/443, and SSH is key-only.
+- Structured **Pino** logs with secret redaction; `GET /api/health` reports database status and the
+  resolved LLM chain.
 - **CI:** every push and pull request runs install, lint, typecheck, the full test suite, a 70%
   coverage gate on the MCP layer and agents, and `npm audit` at high severity
   ([`ci.yml`](.github/workflows/ci.yml)).
-- **Target hosting:** API on AWS App Runner, frontend on S3 + CloudFront, images in ECR, the
-  database on MongoDB Atlas. App Runner rather than Lambda, because a security scan is long-running
-  and the per-host rate limiter needs one process's shared state.
-- **Planned CD:** GitHub Actions with OIDC, so no long-lived AWS keys are ever stored in GitHub.
-- **Monitoring:** structured Pino logs with secret redaction; `GET /api/health` reports database
-  status and the resolved LLM chain, and a scheduled workflow pings it to avoid cold starts.
-- **Cost:** about $6 to $11 a month at low traffic, almost all of it App Runner. LLM spend is
-  well under a dollar for a thousand runs.
+- **Cost:** effectively **$0** (Vercel + Oracle Always Free + Atlas M0). LLM spend stays well under a
+  dollar for a thousand runs.
 
-Architecture, cost breakdown and setup: [docs/05_AWS_ARCHITECTURE.md](docs/05_AWS_ARCHITECTURE.md)
-and [docs/07_DEPLOYMENT_CHECKLIST.md](docs/07_DEPLOYMENT_CHECKLIST.md).
+A `Dockerfile` (non-root user, production dependencies only, clean `SIGTERM` shutdown) is included for
+anyone who prefers to containerise the API instead. Deeper architecture and setup notes:
+[docs/05_AWS_ARCHITECTURE.md](docs/05_AWS_ARCHITECTURE.md) and
+[docs/07_DEPLOYMENT_CHECKLIST.md](docs/07_DEPLOYMENT_CHECKLIST.md).
 
 ## Project structure
 
@@ -379,9 +485,10 @@ AGENTIQ/
 │   │   ├── services/        run · assessment · discovery · git · connections · oauth · crypto · deployment · LLM · stats
 │   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · Project · Discovery · Assessment · Connection · Grant
 │   │   ├── routes/  controllers/  middleware/  config/  lib/  utils/
-│   └── tests/               626 tests
+│   └── tests/               689 tests
 ├── web/                     React SPA
 │   └── src/                 pages · components · hooks · services · store · types
+├── cli/                     dependency-free `agentiq` CLI (login · scan a local folder)
 ├── fixtures/                vulnerable-api and hardened-api, with a shared contract test
 ├── evaluation/              npm run evaluate, and the raw results behind docs/90_EVALUATION.md
 ├── docs/                    product, design, setup and evaluation documents
@@ -397,7 +504,8 @@ missing, and exits if a required one is absent. Only two are required.
 | Variable | Required | Purpose |
 |---|---|---|
 | `MONGO_URI` | yes | MongoDB connection string |
-| `JWT_SECRET` | yes | At least 32 characters; there is no fallback |
+| `JWT_SECRET` | yes | At least 32 characters; signs auth tokens |
+| `ENCRYPTION_KEY` | | Dedicated key (32+ chars) for encrypting stored secrets, independent of `JWT_SECRET`. Falls back to a `JWT_SECRET`-derived key if unset; set it explicitly in production. |
 | `LLM_PRIMARY`, `LLM_FALLBACK` | | `bedrock` and `groq`, in either order |
 | `BEDROCK_MODEL_ID`, `AWS_REGION` | | A Bedrock **inference profile** id, e.g. `apac.amazon.nova-lite-v1:0` |
 | `GROQ_API_KEY` | | The Groq provider |
@@ -406,6 +514,8 @@ missing, and exits if a required one is absent. Only two are required.
 | `RENDER_API_KEY` | | Platform-default Render deploys, a fallback; each user connects their own |
 | `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET` | | "Connect with GitHub" OAuth; token paste works without it |
 | `VERCEL_CLIENT_ID`, `VERCEL_CLIENT_SECRET` | | "Connect with Vercel" OAuth; token paste works without it |
+| `HOSTED` | | Shared/public deployment: refuses local-folder project roots and hides that workflow (users upload a folder instead) |
+| `HOST` | | Interface the server binds; set `127.0.0.1` when behind a reverse proxy |
 | `ALLOW_PRIVATE_TARGETS` | | Local fixtures only; refused in production |
 
 AWS credentials never go in `.env`: the SDK uses its default credential chain. The full list is in
@@ -427,7 +537,9 @@ Every response uses one envelope: `{ success: true, data }` or
 | `POST` | `/api/specs/import` | Import an OpenAPI document |
 | `POST` | `/api/deployments/preflight` · `/api/deployments` | Check, then deploy and verify |
 | `POST` `GET` | `/api/projects` | Register a project (folder, deployed URL, or GitHub repo) and list |
+| `POST` | `/api/projects/upload` | Register a project from an uploaded folder (browser or CLI); stored untrusted, scanned, never run |
 | `POST` `GET` | `/api/assessments` · `/api/assessments/:id` | Run and read an autonomous assessment |
+| `GET` `PUT` `POST` `DELETE` | `/api/providers` · `/api/providers/:provider` | Your own BYOK AI provider keys; verify, activate, presence out only |
 | `GET` `PUT` `DELETE` | `/api/connections` · `/api/connections/:provider` | Your own GitHub/Render/Vercel tokens; presence out only |
 | `GET` | `/api/mcp/tools` | The live tool registry with JSON Schemas (public) |
 | `GET` | `/api/mcp/audit` | The audit log |
@@ -457,7 +569,7 @@ Every endpoint, with its purpose and auth requirement: [docs/02_TRD.md](docs/02_
 ## Testing
 
 ```bash
-npm test                                   # 626 server tests and 24 fixture contract tests
+npm test                                   # 689 server tests and 24 fixture contract tests
 npm --workspace server run test:coverage   # enforces 70% on src/mcp and src/agents
 npm run lint
 npm run typecheck
@@ -470,7 +582,10 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
 
 ## Known limitations
 
-- **No public deployment yet**, and the `Dockerfile` has not been built in CI.
+- **The live backend runs on a free Oracle VM with an ephemeral IP.** DuckDNS keeps the hostname
+  pointed at the current IP automatically, so this self-heals, but a reserved static IP would remove
+  the last bit of fragility. The `Dockerfile` is present but not built in CI (the deployment runs Node
+  directly under pm2).
 - **The benchmark is small.** Four endpoints on two purpose-built apps. The 100% precision and
   recall show the false-positive controls working, not general-case performance.
 - **Generated suites miss three kinds of bug**: wrong types, wrong content types and off-by-one
@@ -493,7 +608,8 @@ completeness, both MCP transports, and the architecture guard. Coverage is about
 
 ## Roadmap
 
-- [ ] Deploy to App Runner and S3 + CloudFront behind an OIDC pipeline
+- [x] Deploy live: Vercel (frontend) + Oracle Always Free VM (backend, always-on) + Atlas, with encrypted secrets and a least-privilege DB user
+- [x] Upload a folder from the browser, or scan one from the terminal with the `agentiq` CLI
 - [x] Assess a whole project: a local folder, a public or private GitHub repo (background clone), or a deployed URL
 - [x] Multi-tenant: connect your own GitHub, Render and Vercel (encrypted at rest), by OAuth or token
 - [x] Deploy to Vercel, not just Render, using the user's own account
