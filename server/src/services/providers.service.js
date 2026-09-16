@@ -8,7 +8,7 @@
  */
 import { AiProviderCredential } from '../models/AiProviderCredential.js';
 import {
-  AI_PROVIDERS, AI_PROVIDER_NAMES, secretKeys, configKeys, verifyAiProvider,
+  AI_PROVIDERS, AI_PROVIDER_NAMES, secretKeys, verifyAiProvider,
 } from './ai-providers.js';
 import { encryptSecret, decryptSecret, last4 } from './crypto.service.js';
 
