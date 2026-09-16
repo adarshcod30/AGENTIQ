@@ -57,6 +57,14 @@ export const envSchema = z
       error: `JWT_SECRET must be at least 32 characters. ${GENERATE_SECRET}`,
     }),
 
+    // Dedicated key for encrypting stored secrets (provider keys, deploy tokens,
+    // runtime env), separate from JWT_SECRET so a leak of one does not expose the
+    // other. Optional: when unset, encryption falls back to a JWT_SECRET-derived
+    // key. When set it must be strong. See services/crypto.service.js.
+    ENCRYPTION_KEY: z.string().min(32, {
+      error: `ENCRYPTION_KEY must be at least 32 characters. ${GENERATE_SECRET}`,
+    }).optional(),
+
     // ── Origins ──────────────────────────────────────────────────────────────
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
     APP_BASE_URL: z.url().default('http://localhost:5173'),
@@ -192,7 +200,7 @@ export function disabledFeatures(source = process.env) {
 }
 
 const SECRET_KEYS = new Set([
-  'JWT_SECRET', 'MONGO_URI', 'GROQ_API_KEY',
+  'JWT_SECRET', 'ENCRYPTION_KEY', 'MONGO_URI', 'GROQ_API_KEY',
   'GOOGLE_CLIENT_SECRET', 'GOOGLE_CLIENT_ID', 'RENDER_API_KEY',
   'RESEND_API_KEY', 'SMTP_URL', 'GMAIL_APP_PASSWORD',
 ]);
@@ -277,7 +285,7 @@ export function formatEnvTable(source = process.env, parsed = null) {
  * the two cannot drift apart silently.
  */
 export const ENV_KEYS = [
-  'NODE_ENV', 'PORT', 'MONGO_URI', 'JWT_SECRET', 'CORS_ORIGIN',
+  'NODE_ENV', 'PORT', 'MONGO_URI', 'JWT_SECRET', 'ENCRYPTION_KEY', 'CORS_ORIGIN',
   'APP_BASE_URL', 'API_BASE_URL', 'GROQ_API_KEY',
   'GROQ_MODEL', 'GROQ_MODEL_EXPLAIN', 'BEDROCK_MODEL_EXPLAIN',
   'LLM_PRIMARY', 'LLM_FALLBACK',
