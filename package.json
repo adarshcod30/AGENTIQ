@@ -28,7 +28,7 @@
     "start": "npm --workspace server run start"
   },
   "devDependencies": {
-    "concurrently": "10.0.5"
+    "concurrently": "10.0.6"
   },
   "author": "Adarsh Dwivedi",
   "license": "MIT",
