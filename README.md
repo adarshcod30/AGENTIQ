@@ -78,7 +78,7 @@ The third problem is the one AGENTIQ is built around.
 | **Spec grounding** | Import an OpenAPI 3.0 or 3.1 document and ground generation in an operation's declared parameters, schemas and status codes. |
 | **Security Agent** | Eight probe families mapped to the OWASP API Security Top 10 (2023): SQL injection, reflected XSS, server-side request forgery, open redirect, broken authentication, CORS, security headers, rate limiting. Every finding carries its payload, the signal that fired, and the baseline it deviated from. |
 | **False-positive control** | Each probe compares against a benign baseline, and an "intended to be public" declaration stops the auth probe from flagging every public API. |
-| **MCP tool layer** | Nineteen registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
+| **MCP tool layer** | Twenty-one registered tools with Zod schemas, six risk classes, per-host grants, a filesystem jail and process sandbox for local analysis, an SSRF egress guard, and an append-only audit log. Also served as an MCP server, so Claude Desktop or an IDE can drive the same tools. |
 | **Deployment Agent** | Read-only preflight against GitHub, then a deploy to **Render or Vercel using the user's own connected account**, then an automatic test and scan of the live URL, all recorded together. |
 | **Autonomous assessment** | Register a project as a local folder, an **uploaded folder** (from the browser or the [`agentiq` CLI](#command-line-interface)), a public or private GitHub repo (shallow-cloned in the background, statically scanned, never executed), or a deployed URL, and AGENTIQ discovers its routes, starts it or targets the live URL, tests every endpoint, runs the security scan, and judges readiness to deploy, with prioritised guidance on what to fix and why. |
 | **Bring your own accounts and keys** | Multi-tenant. Each user connects their own GitHub, Render and Vercel (by OAuth or a pasted token), and optionally their own **AI provider** for generation (OpenAI, Anthropic, Gemini, Grok, Groq or Bedrock). Every secret is encrypted at rest under a dedicated key and never returned. Private repos clone with the user's token, and deploys go to the user's own account, no shared platform key. |
@@ -485,7 +485,7 @@ AGENTIQ/
 │   │   ├── services/        run · assessment · discovery · git · connections · oauth · crypto · deployment · LLM · stats
 │   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · Project · Discovery · Assessment · Connection · Grant
 │   │   ├── routes/  controllers/  middleware/  config/  lib/  utils/
-│   └── tests/               689 tests
+│   └── tests/               689 server tests
 ├── web/                     React SPA
 │   └── src/                 pages · components · hooks · services · store · types
 ├── cli/                     dependency-free `agentiq` CLI (login · scan a local folder)
@@ -569,7 +569,7 @@ Every endpoint, with its purpose and auth requirement: [docs/02_TRD.md](docs/02_
 ## Testing
 
 ```bash
-npm test                                   # 689 server tests and 24 fixture contract tests
+npm test                                   # 689 server tests and 30 fixture contract tests (719 in all)
 npm --workspace server run test:coverage   # enforces 70% on src/mcp and src/agents
 npm run lint
 npm run typecheck

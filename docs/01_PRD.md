@@ -43,7 +43,7 @@ tool layer, and the whole trace can be reconstructed."**
 A user describes an endpoint: a URL and a sentence of intent, or an operation picked from an
 imported OpenAPI specification. The **Testing Agent** asks an LLM for test cases, validates them
 against a schema, and executes each one through the `run_test_case` tool. The **Security Agent**
-runs six probe families through their own tools. The **Deployment Agent** deploys a repository
+runs eight probe families through their own tools (six in the first release; SSRF and open redirect came later). The **Deployment Agent** deploys a repository
 to Render and then points the other two agents at the URL that went live.
 
 Every tool call passes through the same chain: schema validation, a permission check against
@@ -85,7 +85,7 @@ deterministically by code, never by the model.
 | Persona | What they want | What they get |
 |---|---|---|
 | **Backend developer** (primary) | "Did I break the contract?" in under a minute | Paste a URL and intent, get executed tests with real assertions |
-| **Solo developer** (primary) | Security awareness without learning ZAP | Six probe families with plain-English findings and remediation |
+| **Solo developer** (primary) | Security awareness without learning ZAP | Eight probe families with plain-English findings and remediation |
 | **Reviewer or security lead** | Evidence that the claims are true | Audit log, Tool Registry page, evaluation numbers, one-command setup |
 
 **Design for the reviewer.** If a claim about the product cannot be demonstrated in one click
@@ -164,7 +164,7 @@ executed results.
 
 ### F3 · Security Agent: P0
 
-**Six probe families, each mapped to the OWASP API Security Top 10 (2023):**
+**Eight probe families, each mapped to the OWASP API Security Top 10 (2023).** The first release shipped the six below; SSRF and open redirect were added afterwards and are listed at the end of the table.
 
 | Probe | OWASP | Detection signal |
 |---|---|---|
@@ -174,6 +174,8 @@ executed results.
 | CORS misconfiguration | API8:2023 | `Access-Control-Allow-Origin: *` **with** `Allow-Credentials: true`, or origin reflection |
 | Missing security headers | API8:2023 | HSTS, CSP, X-Content-Type-Options, X-Frame-Options absent |
 | Rate limiting absent | API4:2023 Unrestricted Resource Consumption | N rapid requests, all 2xx, no `429`, no `Retry-After` |
+| Server-side request forgery | API7:2023 Server-Side Request Forgery | Evidence that the server fetched an attacker-chosen URL (see `probe_ssrf`) |
+| Open redirect | API7:2023 Server-Side Request Forgery | A 3xx whose `Location` points at an injected off-site canary host |
 
 **The false-positive problem is the actual engineering here.** Two mechanisms:
 

@@ -272,13 +272,13 @@ Ten minutes, and every claim in these docs is reachable from here.
 
 1. **(0:00) About page.** What this is, what it covers and what is out of scope. Leading with the
    limitations makes every later claim more credible.
-2. **(1:00) Tool Registry.** Nine tools, live schemas, risk classes. *"Nothing on this page is
+2. **(1:00) Tool Registry.** Twenty-one tools, live schemas, risk classes. *"Nothing on this page is
    hardcoded: it is fetched from the running server's MCP registry."*
 3. **(2:00) A run on the vulnerable fixture.** Permission sheet: pause here and explain it.
    Watch the steps stream. Open a failing assertion and read the expected-vs-actual.
 4. **(4:30) Security scan, same target.** Expand a SQLi finding: payload, signal, baseline,
    remediation.
-5. **(6:00) Same scan against the hardened fixture.** Zero findings. *"Same six probes, same
+5. **(6:00) Same scan against the hardened fixture.** Zero findings. *"Same eight probes, same
    contract, defects fixed: this is the false-positive control."*
 6. **(7:00) Audit Log.** Every invocation from the last five minutes. Point at the `blocked_ssrf`
    row: *"That is the SSRF guard refusing a link-local target."*

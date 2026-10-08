@@ -38,7 +38,7 @@
 
 "Why not serverless?" is the obvious question, and there are three concrete reasons.
 
-- **A security scan is long-running.** The Security Agent runs six probe families, each with a
+- **A security scan is long-running.** The Security Agent runs eight probe families, each with a
   10 s egress timeout ([02_TRD.md](02_TRD.md) §7). A worst-case scan approaches Lambda's practical
   execution window, and a timeout mid-scan leaves partial findings with no clean way to report
   them.

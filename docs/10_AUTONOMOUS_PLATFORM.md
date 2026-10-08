@@ -1,5 +1,7 @@
 # 10 · Autonomous platform: assessment and plan
 
+> **Counts in this document are historical.** "Nine tools" and "six probes" describe the system when it was written. The current registry holds 21 tools (`EXPECTED_TOOLS` in `server/src/mcp/tools/index.js`) and the scanner runs eight probe families.
+>
 > Working document for the evolution from the current URL-driven tool into an autonomous
 > project → test → assess → deploy platform. It is the map for the phased implementation that
 > follows, not a description of what is built today. Status of each phase is tracked in §H.
