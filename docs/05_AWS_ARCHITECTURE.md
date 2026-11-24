@@ -124,7 +124,7 @@ Generation and explanation are different problems, so they route independently (
 
 | Task | What it is | Bedrock | Groq |
 | --- | --- | --- | --- |
-| `generation` | 5 test cases as structured JSON, once per run; sets suite quality | `nova-lite` | `gpt-oss-120b` |
+| `generation` | 5 test cases as structured JSON, once per run; sets suite quality | `deepseek.v3.2` | `gpt-oss-120b` |
 | `explanation` | 2 sentences on one failure, about 200 tokens, once per failure | `nova-lite` | `gpt-oss-20b` |
 
 Two measurements overturned the obvious assignment.
@@ -143,13 +143,11 @@ per successful explanation.
 
 Lite led on every repeat. Bigger was not better, and it cost 13 times more to be worse.
 
-These figures come from a separate model-comparison sweep. The committed evaluation
-([90_EVALUATION.md](90_EVALUATION.md)) is a later run of the same Nova Lite configuration and
-measured 50.0%, inside the 40 to 50% range observed here: run-to-run variance, not a
-contradiction. On Bedrock
-both tasks therefore resolve to the same model, because that is what the evidence supports. The
-routing exists so the tiers *can* diverge (the Groq fallback already does), not to manufacture a
-split the measurements contradict.
+These figures come from an earlier model-comparison sweep on the Nova models. The committed
+evaluation ([90_EVALUATION.md](90_EVALUATION.md)) is a later run that uses DeepSeek V3.2 for
+generation. It measured 63.3% on the same grounded benchmark, ahead of Nova Lite's 46.7% here, so
+generation now routes to DeepSeek V3.2 and explanation stays on Nova Lite. The routing exists so the tiers can diverge, and they now do, but only because the measurements
+support the split.
 
 ---
 

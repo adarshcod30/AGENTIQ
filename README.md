@@ -254,7 +254,7 @@ flowchart LR
     EG -- "guarded HTTP" --> TGT["Target APIs<br/>user-nominated"]
     EG --> EXTAPI["GitHub, Render and Vercel APIs<br/>with the user's own token"]
     REG --> AUD
-    SV --> LLM["LLM chain<br/>Bedrock Nova, then Groq"]
+    SV --> LLM["LLM chain<br/>Bedrock DeepSeek V3.2, then Groq"]
     SV --> DB[("MongoDB")]
     AUD --> DB
 ```
@@ -403,23 +403,33 @@ suite is scored on how many it catches. This adapts the mutation-score method fr
 
 | | Spec-grounded | Description-only |
 |---|--:|--:|
-| **Mutation score, mean of 3 paired runs** | **50.0%** | 43.3% |
-| Assertions generated | 141 | 124 |
-| Paired runs won / tied / lost | 2 / 1 / 0 | |
+| **Mutation score, mean of 3 runs** | 63.3% | **86.7%** |
+| Observed range | 60% to 70% | 80% to 100% |
+| Mutants killed (30 evaluated) | 19 | 26 |
+| Assertions generated | 173 | 195 |
 
-Grounding helped in every run it did not tie, which is **suggestive, not significant** at 3
-repeats. The more useful finding is what *neither* arm ever catches: a field returned as the wrong
-type, a wrong content type, and an off-by-one filter. Those are the next things for the prompt to
-learn.
+Giving the generator the OpenAPI operation **lowered** the mutation score by 23.4 points. We
+expected the opposite, and an earlier evaluation on Amazon Nova Lite (50.0% against 43.3%) seemed
+to show it. Repeating the measurement with DeepSeek V3.2 reversed it. The ranges do not overlap,
+but three repeats on two small apps is a strong hint, not a significance test. The most useful
+rows are the mutants a suite never kills. The grounded suites never caught a field returned as the
+wrong type (`M3`) or an off-by-one filter (`M8`). The description-only suites caught `M3` every
+time but `M8` only once in three runs. Both arms were weak on a list endpoint that always returns
+an empty array (`M7`). Those are the next things for the prompt to learn. Per-mutant tables are in
+[docs/90_EVALUATION.md](docs/90_EVALUATION.md).
 
 ### Cost and latency
 
 | | |
 |---|--:|
-| Model | Amazon Nova Lite on Bedrock |
-| Mean generation latency | 2.5 s |
-| Cost of the entire evaluation run | **$0.0043** (27,815 tokens) |
-| Audited tool invocations | 522 |
+| Model | DeepSeek V3.2 on Amazon Bedrock |
+| Generation calls | 24 (40,921 tokens) |
+| Mean generation latency | 8.9 s |
+| Estimated cost of the whole run | below measurable precision |
+| Audited tool invocations | 601, all recorded as `ok` |
+
+Only generation calls a model. Executing suites and scanning make no LLM calls, so re-running a
+suite against every mutant costs nothing beyond HTTP.
 
 ## Tech stack
 
