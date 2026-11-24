@@ -24,6 +24,8 @@ import {
   startDeployment, missingGrants, AUTO_VERIFY_FAMILIES, REQUIRES_APPROVAL_FAMILIES,
 } from '../src/services/deployment.service.js';
 import { Deployment, DEPLOY_STATE } from '../src/models/Deployment.js';
+import { Connection } from '../src/models/Connection.js';
+import { setConnection } from '../src/services/connections.service.js';
 import { registerAllTools } from '../src/mcp/tools/index.js';
 import { getTool } from '../src/mcp/registry.js';
 import { grantStore, RISK_CLASS } from '../src/mcp/permissions.js';
@@ -109,7 +111,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await Promise.all([
-    User.deleteMany({}), Deployment.deleteMany({}), TestRun.deleteMany({}),
+    User.deleteMany({}), Deployment.deleteMany({}), TestRun.deleteMany({}), Connection.deleteMany({}),
   ]);
   await AuditEvent.collection.deleteMany({});
   grantStore.clear();
@@ -546,6 +548,32 @@ describe('/api/deployments', () => {
     expect(res.body.data.configured).toBe(true);
     expect(res.body.data.provider).toBe('render');
     expect(res.body.data.requiresApprovalFamilies).toContain('sqli');
+  });
+
+  it('GET /config is configured for a user who connected their own account, with no platform key', async () => {
+    delete env.RENDER_API_KEY;
+    await setConnection({ userId: user._id, provider: 'render', token: 'rnd_user_owned_token_1234' });
+    const res = await auth(request(app).get('/api/deployments/config'));
+    expect(res.status).toBe(200);
+    expect(res.body.data.configured).toBe(true);
+    const render = res.body.data.providers.find((p) => p.name === 'render');
+    expect(render.configured).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('rnd_user_owned_token_1234');
+  });
+
+  it('GET /config counts a connected Vercel account too', async () => {
+    delete env.RENDER_API_KEY;
+    await setConnection({ userId: user._id, provider: 'vercel', token: 'vercel_user_owned_token_5678' });
+    const res = await auth(request(app).get('/api/deployments/config'));
+    expect(res.body.data.configured).toBe(true);
+    expect(res.body.data.providers.find((p) => p.name === 'vercel').configured).toBe(true);
+  });
+
+  it('GET /config says not configured when neither a platform key nor a connection exists', async () => {
+    delete env.RENDER_API_KEY;
+    const res = await auth(request(app).get('/api/deployments/config'));
+    expect(res.body.data.configured).toBe(false);
+    expect(res.body.data.note).toMatch(/connect/i);
   });
 
   it('refuses honestly when RENDER_API_KEY is absent', async () => {

@@ -13,7 +13,7 @@ import {
   AUTO_VERIFY_FAMILIES, REQUIRES_APPROVAL_FAMILIES, PREFLIGHT_HOSTS,
 } from '../services/deployment.service.js';
 import { listProviders, PROVIDER_NAMES } from '../deploy/index.js';
-import { getConnectionToken } from '../services/connections.service.js';
+import { getConnectionToken, listConnections } from '../services/connections.service.js';
 import { protectRoute } from '../middleware/auth.js';
 import { ok, fail } from '../utils/http.js';
 
@@ -35,18 +35,34 @@ const deploySchema = z.object({
 
 const sessionOf = (req) => req.get('x-session-id') ?? String(req.user._id);
 
-/** What the agent can and cannot do, so the UI never has to guess. */
-router.get('/config', protectRoute, (req, res) => ok(res, {
-  configured: isConfigured(),
-  provider: 'render',
-  providers: listProviders(),
-  preflightHosts: PREFLIGHT_HOSTS,
-  autoVerifyFamilies: AUTO_VERIFY_FAMILIES,
-  requiresApprovalFamilies: REQUIRES_APPROVAL_FAMILIES,
-  note: isConfigured()
-    ? 'Deployments target Render. AGENTIQ itself runs on AWS: see docs/05_AWS_ARCHITECTURE.md.'
-    : 'RENDER_API_KEY is not configured, so no deployment can be attempted.',
-}));
+/**
+ * What the agent can and cannot do, so the UI never has to guess.
+ *
+ * "Configured" is per user. A user who has connected their own Render or Vercel
+ * account can deploy even when the server has no platform RENDER_API_KEY, which
+ * is exactly what POST / already allows. Gating the page on the platform key
+ * alone hid the whole Deploy screen from users who had connected an account.
+ */
+router.get('/config', protectRoute, async (req, res) => {
+  const rows = await listConnections({ userId: req.user._id }).catch(() => []);
+  const connected = new Set(rows.filter((r) => r.connected).map((r) => r.provider));
+  const providers = listProviders().map((p) => ({
+    ...p, configured: p.configured || connected.has(p.name),
+  }));
+  const configured = providers.some((p) => p.configured && p.status === 'available');
+
+  return ok(res, {
+    configured,
+    provider: 'render',
+    providers,
+    preflightHosts: PREFLIGHT_HOSTS,
+    autoVerifyFamilies: AUTO_VERIFY_FAMILIES,
+    requiresApprovalFamilies: REQUIRES_APPROVAL_FAMILIES,
+    note: configured
+      ? 'Deployments go to your own connected account (Render or Vercel).'
+      : 'No Render or Vercel account is connected, so no deployment can be attempted.',
+  });
+});
 
 /** Read-only. Answers "would this deploy?" without consenting to a deployment. */
 router.post('/preflight', protectRoute, async (req, res) => {

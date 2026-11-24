@@ -138,7 +138,7 @@ export function DeployPage() {
         <EmptyState
           icon={<UploadCloud size={40} strokeWidth={1.5} />}
           title="The deployment agent is not configured"
-          body={`${config.data.note} Add a Render API key to server/.env and restart the server. Nothing is mocked here, without a credential there is no deployment to show.`}
+          body={`${config.data.note} Connect your Render or Vercel account in Settings, then come back. Nothing is mocked here, without a credential there is no deployment to show.`}
         />
       </Card>
     );
