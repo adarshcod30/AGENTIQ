@@ -33,13 +33,13 @@
     "helmet": "8.3.0",
     "js-yaml": "4.3.2",
     "jsonwebtoken": "9.0.3",
-    "mongoose": "9.9.2",
-    "nodemailer": "^10.0.16",
+    "mongoose": "9.13.0",
+    "nodemailer": "10.6.1",
     "passport": "0.7.0",
     "passport-google-oauth20": "2.0.0",
     "pino": "10.3.1",
     "pino-http": "11.0.0",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
