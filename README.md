@@ -495,7 +495,7 @@ AGENTIQ/
 │   │   ├── services/        run · assessment · discovery · git · connections · oauth · crypto · deployment · LLM · stats
 │   │   ├── models/          User · TestRun · ApiSpec · AuditEvent · Deployment · Project · Discovery · Assessment · Connection · Grant
 │   │   ├── routes/  controllers/  middleware/  config/  lib/  utils/
-│   └── tests/               689 server tests
+│   └── tests/               692 server tests
 ├── web/                     React SPA
 │   └── src/                 pages · components · hooks · services · store · types
 ├── cli/                     dependency-free `agentiq` CLI (login · scan a local folder)
@@ -579,7 +579,7 @@ Every endpoint, with its purpose and auth requirement: [docs/02_TRD.md](docs/02_
 ## Testing
 
 ```bash
-npm test                                   # 689 server tests and 30 fixture contract tests (719 in all)
+npm test                                   # 692 server tests and 30 fixture contract tests (722 in all)
 npm --workspace server run test:coverage   # enforces 70% on src/mcp and src/agents
 npm run lint
 npm run typecheck
